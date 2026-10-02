@@ -48,10 +48,12 @@
   - `students export` 对话框控制、Enrolled CSV 下载、格式校验与收据生成实测通过。
 - [x] **自动化离线测试**：
   - 38 项单元测试与隐私检查全部通过。
-- [ ] **`--auth-state` 独立 Context 实机端到端验证**：
-  - 离线隔离测试已通过；独立 subagent 实机端到端验收准备就绪，现阶段不声称已完成实机验证。
-- [ ] **跨 Chrome 进程重启登录态持久化**：
-  - 进程重启后的登录态保持情况仍待后续实机验证。
+- [ ] **`--auth-state` 独立 Context 登录恢复**：
+   - 独立 agent 实测失败：刷新快照后 cookie 已随请求送出，但服务端清除认证 cookie。对齐 UA 仍失败，原因尚未确定；未静默回退或覆盖有效快照。
+- [x] **跨 Chrome 进程重启登录态持久化**：
+   - 保存关闭专用 Chrome，使用临时 headless wrapper 重启同一 profile，登录和课程发现正常。
+- [x] **独立 agent 的 headless profile 验收**：
+   - 从页面动态发现课程与最新 Upcoming，导出 CSV，人数、全部列值及规范化邮箱/报名时间集合与首份人工探索导出一致；文件和收据留在私有目录。此成功属于 profile 路线，不代表 auth-state 路线成功。
 
 ---
 

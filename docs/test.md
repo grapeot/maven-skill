@@ -63,5 +63,6 @@ pytest
 | **Chrome 进程唤起与 CDP 回环** | 验证 `session open` 唤起系统 Chrome 并监听 `127.0.0.1:9337` | 已实测通过 | 系统 Chrome 正确启动，端口回环监听，重复调用返回 `reused=true` |
 | **人工登录与凭据保存** | 用户在图形界面完成登录，`session save` 导出状态 | 已实测通过 | 用户成功登录 Maven，导出的快照文件权限为 `0600` |
 | **默认 Profile 业务命令实测** | 验证 `courses list`、`cohorts list` 及 `students export` | 已实测通过 | 课程列表与班期解析正确，Enrolled CSV 成功下载并通过全部数据校验，原用户标签页完好保留 |
-| **`--auth-state` 独立上下文实机验证** | 验证在全新 Chrome 实例中通过 `--auth-state` 恢复登录态并执行业务命令 | 待实机验证 | 离线上下文隔离测试已通过；独立 subagent 实机端到端验收准备就绪，现阶段不声称已实机验证 |
-| **跨 Chrome 重启登录态保持** | 关闭 Chrome 进程后重新 `session open`，验证是否保留登录 | 待实测 | 待后续用户重启浏览器后实测 |
+| **`--auth-state` 独立上下文实机验证** | 在同一 Chrome 中建立新 context，载入快照并认证 | 认证失败 | 新鲜 cookie 已发送但被服务端清除；不能静默回退 profile 或覆盖有效快照 |
+| **跨 Chrome 重启登录态保持** | 关闭后重启同一 profile，验证是否保留登录 | 通过 | 临时 headless Chrome 中登录保持，业务查询正常 |
+| **独立 agent headless 导出** | 动态发现课程、选择 latest、导出并与首份 CSV 比较 | 通过 | 行数、全列值、规范化邮箱/时间集合一致，输出与 receipt 私有；仅验证 profile 路线 |
