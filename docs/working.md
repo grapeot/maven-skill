@@ -4,65 +4,59 @@
 
 ---
 
-## 2026-10-02: 项目初始化与骨架搭建 (Scaffold Phase)
+## 2026-10-02: v0.1 业务命令实现与工程落地
 
 ### 1. 今日完成工作
-- **项目结构与设计固化**：
-  - 确定 Python 3.12+ 依赖标准，包名 `maven_skill`，命令行入口 `maven-skill`。
-  - 确立基于 Playwright 驱动本地 Google Chrome 的底层架构方案。
-  - 确立“持久化 Profile 为主，认证状态 JSON 快照为辅”的双层会话管理模型。
-- **文档体系建立**：
-  - 完成 `README.md`：概述、安装指南、配置说明、CLI 语法及 Agent Skill 安装规范。
-  - 完成 `AGENTS.md`：面向 AI Agent 的版本控制纪律、Python 虚拟环境管理、隐私边界及业务只读红线。
-  - 完成 `docs/prd.md`：产品需求文档，明确功能规格、边界及分期验收标准。
-  - 完成 `docs/rfc.md`：技术设计说明，深度阐述 Session / Profile / Auth State 职责及安全架构。
-  - 完成 `docs/test.md`：测试规范，包含离线单元测试用例设计与实机待测项清单。
-  - 完成 `skills/maven/SKILL.md`：标准化 Agent 技能规范，定义目标、资源、输出契约与安全原则。
+- **开源代码仓库与工程规范**：
+  - 初始化公开 GitHub 仓库：`https://github.com/grapeot/maven-skill`（MIT 许可证）。
+  - 配置主分支（`master`）保护规则：要求 Pull Request、自动化测试检查通过、0 reviewers 且 `enforce_admins=true`。
+  - 基础脚手架已推送至远端仓库。
+- **v0.1 只读业务 CLI 实现**：
+   - 实现 `courses list`：通过首页账号菜单动态定位 Dashboard 与 Courses，提取并去重课程列表，不硬编码租户或课程路径，并报告完整性。
+  - 实现 `cohorts list`：解析课程概览页班期卡片，交叉核验 Student home 链接与设置链接参数以提取 slug；实现安全的 `latest` 选期逻辑（优先 Upcoming 且强制年份比较，拒绝凭数字序号猜测）。
+  - 实现 `students export`：精准筛选 Enrolled 学员，触发报表导出并进行严密数据校验（表头、全部 enrolled 状态、规范化邮箱去重、带时区时间戳、页面人数与行数一致性及非 HTML 拦截）。
+  - 实现 `--auth-state` 全局选项：支持在已有 CDP 浏览器中建立临时独立 Context 隔离运行，执行完毕后安全关闭临时上下文。
+  - 优化工作标签页隔离：默认业务命令在已有持久 Context 中开辟独立标签页执行，用毕即关，完全不干扰用户正在浏览的原有页面。
+   - 实现收据机制：在 `.local/receipts/`（`0700`）保存 SHA-256、行数和列名等元数据（`0600`），并原子替换 `latest.json` JSON 指针文件。
+- **离线测试套件扩充**：
+   - 测试用例由初期的 9 项扩充至 38 项，覆盖会话安全、端口隔离、数据解析、班期选期规则、CSV 校验与工作标签页隔离；隐私扫描独立执行。
+  - 自动化隐私扫描确认 `src/` 与 `tests/` 无任何内部私有路径或真实账号数据泄露。
 
 ---
 
-## 当前状态与待实测验证项 (Pending Verification Checklist)
+## 实机实测与真实经验记录 (Lessons Learned)
 
-Session 基础设施已实现并完成下述本机验证；Maven 登录后的业务页面仍待用户登录后探索。
+实机环境下，在默认 Profile 模式下顺利完成了 `courses list`、`cohorts list` 及 `students export` 的端到端测试，生成的 Enrolled CSV 成功通过所有格式与数据校验，且原有用户标签页保持原样。
 
-## 验证记录（2026-10-02）
-
-- `python -m pytest tests -q`：9 passed，覆盖 Maven URL 限制、拒绝 URL 内凭证、快照原子写入与 0600 权限、错误 profile 拒绝、断连状态。
-- `session open` 已启动可见 Chrome；独立进程 `session status`、`page snapshot`、重复 `session open` 接入成功，重复打开返回 `reused=true` 且保持页面。
-- `session save` 已导出状态 JSON，实际目录权限 0700、状态文件权限 0600；此时尚未人工登录，不代表已有有效 Maven 账号凭证。
-- `lsof` 核实 CDP 仅监听 `127.0.0.1:9337`。
-- `git check-ignore` 验证 profile Cookies、认证快照、下载 CSV、页面快照及 `.env` 均忽略。
-- 公共源码与文档隐私扫描仅命中测试中的虚拟 URL 凭证示例，无真实账户或本机私有路径。
-- 已根据首页实际 Log In 链接进入登录页，窗口保持打开，等待人工登录。
-- 独立本地 master Git 已初始化；未提交、未创建远端仓库。
-- 用户随后完成人工登录；经账号菜单进入 Dashboard → Courses → course → Students，已验证课程/cohort 观察。具体账号路径和业务数据仅保留在 `.local/`。
-- 下载图标打开 Export Students 对话框，核对默认 Enrolled 筛选后点击确认；CSV 成功落盘，字段与当前消费方所需的 email/status/enrolled_at 相符，消费方只读 dry-run 通过。
-- 登录后的 `session save` 再次成功；未关闭浏览器，不宣称跨重启登录已验证。
-
-## Lessons Learned
-
-- Students 的下载按钮没有文本。按 Export 文本定位按钮会超时；先观察实际 DOM，点击下载图标打开 dialog。
-- 点击下载图标只打开选择范围的对话框。围绕第一次点击等待 download 会超时；需要在对话框内确认导出时监听下载事件。
-
-- [x] **Google Chrome 启动与 CDP 连通性联调**：
-  - 验证 `session open` 能够成功唤起系统已安装的 Chrome，并正确应用 `--user-data-dir` 与 `--remote-debugging-port`。
-  - 验证 `session status` 在不同端口状态下的探测逻辑与容错。
-- [ ] **人工登录与持久化 Profile 保持**：
-  - 人工在弹出的 Chrome 实例中完成 Maven 平台真实账号登录。
-  - 关闭浏览器进程后重新执行 `session open`，验证登录态是否持久保存在 `.local/browser-profile` 中，无需重复输入凭据。
-- [x] **认证状态快照生成与权限审计**：
-   - `session save` 写入成功，文件权限为 `0600`；登录凭证有效性待人工登录后验证。
-- [ ] **页面观察与跳转**：
-  - 运行 `page snapshot` 提取真实 Maven 页面文本，评估脱敏需求与内容解析质量。
-  - 运行 `page goto` 跳转至特定 Cohort 页面，确认页面跳转无卡死或无响应现象。
-- [ ] **业务逻辑预研 (Phase 2 准备)**：
-  - 调查真实 Cohort 列表的 DOM 结构（是翻页器还是无限滚动）。
-  - 调查报表 CSV 导出的实际交互逻辑与下载流，准备设计专属业务命令。
+在开发与实测过程中记录的真实踩坑经验：
+1. **下载图标无文本与 Accessible Name**：
+   - Maven 学员列表页的导出按钮为一个纯图标按钮，不包含任何文字内容，亦未设置 `aria-label`。通过 `get_by_role("button", name="Export")` 定位会直接超时。最终通过其特定的 SVG 路径数据（`d="M8.0625 10.3135L12 14.2499L15.9375 10.3135"`）唯一定位。
+2. **下载流程分为打开对话框与确认导出两步**：
+   - 第一次点击下载图标仅会呼出 `Export Students` 对话框，此时并不会触发文件下载。若直接围绕首次点击等待 `download` 事件会导致超时。正确流程为：先点击图标打开对话框，核验并确保仅勾选 `Enrolled`，随后针对对话框内的 `Export Students` 确认按钮设置 `expect_download` 监听并触发点击。
+3. **页面 Enrolled 人数初始加载可能为 0**：
+   - 页面初始加载时，`ENROLLED (<count>)` 按钮上的数字可能暂显为 0 或需要数秒后才完成统计更新。必须增加稳定等待逻辑，并在对话框打开后，将其内部标注的 `... users` 计数与页面计数进行交叉核对，确保两处统计完全一致后再执行导出。
 
 ---
 
-## 风险与开发守则提醒
+## 验证清单 (Verification Checklist)
 
-1. **选择器严禁臆测**：在未连接真实浏览器查验 DOM 之前，代码库与文档中不硬编码任何 Maven 业务选择器。
-2. **只读操作红线**：当前阶段仅限于页面观察与状态探测，严禁执行任何写入、更新或邀请发送。
-3. **私密数据防外流**：`.local/` 目录严禁提交至版本控制；公共文档中仅保留虚拟示例。
+- [x] **基础设施与会话管理**：
+   - `session open`、`session status`、`session save` 实测通过；端口严格回环绑定。`session close` 已实现，尚未为验收关闭用户窗口。
+- [x] **v0.1 业务命令端到端（默认 Profile）**：
+  - `courses list` 动态路由与列表输出实测通过。
+  - `cohorts list` 班期卡片提取与 `latest` 判定实测通过。
+  - `students export` 对话框控制、Enrolled CSV 下载、格式校验与收据生成实测通过。
+- [x] **自动化离线测试**：
+  - 38 项单元测试与隐私检查全部通过。
+- [ ] **`--auth-state` 独立 Context 实机端到端验证**：
+  - 离线隔离测试已通过；独立 subagent 实机端到端验收准备就绪，现阶段不声称已完成实机验证。
+- [ ] **跨 Chrome 进程重启登录态持久化**：
+  - 进程重启后的登录态保持情况仍待后续实机验证。
+
+---
+
+## 风险与安全红线提醒
+
+1. **绝对只读红线**：严禁执行任何变更课程设置、修改学员状态、发送邀请或外部记账操作。
+2. **严格数据隔离**：所有真实业务数据、CSV 导出文件及运行日志严格留在本地 `.local/` 目录中，严禁推入代码仓库。公共文档中仅保留虚拟示例。
+3. **输出脱敏要求**：业务命令 stdout 严禁输出学员姓名与邮箱地址。

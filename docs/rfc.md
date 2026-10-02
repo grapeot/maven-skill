@@ -1,16 +1,16 @@
-# RFC: Maven Skill 会话架构与设计说明
+# RFC: Maven Skill 会话与业务交互架构设计
 
 - **作者**：Maven Skill 设计组
-- **状态**：Draft / Proposed
+- **状态**：Implemented / v0.1 Specification
 - **日期**：2026-10-02
 
 ---
 
 ## 1. 摘要与背景
 
-Maven Skill 用于观察 Maven（maven.com）平台的课程信息、Cohort 进展及下载 CSV 报表。为适应不同页面任务与平台改版，本 RFC 采用真实 Google Chrome 实例的浏览器优先会话管理模型。官方 API 的可用范围尚未核实。
+Maven Skill 用于观察 Maven（maven.com）平台的课程开设信息、班期（Cohort）排期及导出报名学员（Enrolled）CSV 报表。为抵御官方 API 范围未知及私有接口频繁变更的脆弱性，本设计采用真实 Google Chrome 实例与浏览器优先（Browser-First）会话管理模型。
 
-本 RFC 重点界定**运行态会话 (Session)**、**持久化配置 (Profile)** 与**认证状态快照 (Auth State)** 三者之间的概念边界与实现权衡，并阐明未来的 UI 交互迭代路线。
+本 RFC 界定**运行态会话 (Session)**、**持久化配置 (Profile)** 与**便携认证快照 (Auth State)** 三者职责，阐明已实现的 v0.1 业务交互契约（动态路径发现、班期识别、导出对话框控制与数据校验）及隔离执行模型。
 
 ---
 
@@ -23,92 +23,95 @@ Maven Skill 用于观察 Maven（maven.com）平台的课程信息、Cohort 进�
 │                      AI Agent                          │
 │        (Codex / Claude Code / Cursor / OpenCode)       │
 └──────────────────────────┬─────────────────────────────┘
-                           │ CLI 调用 (JSON 交互)
+                           │ CLI 调用 (结构化 JSON 交互)
                            ▼
 ┌────────────────────────────────────────────────────────┐
 │                   maven-skill CLI                      │
-│        (Python 3.12+ / argparse / Playwright 客户端)    │
+│     (Python 3.12+ / Playwright 客户端 / ops / parse)    │
 └──────────────────────────┬─────────────────────────────┘
-                           │ CDP (Chrome DevTools Protocol)
-                           │ http://127.0.0.1:9337
+                           │ Chrome DevTools Protocol (CDP)
+                           │ http://127.0.0.1:9337 (仅限本地回环)
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│                 Google Chrome (独立进程)                │
-│  - 监听: 127.0.0.1:9337 (严格回环绑定)                 │
-│  - 数据目录: .local/browser-profile (0700 权限)          │
+│                 Google Chrome (独立宿主进程)             │
+│  - 监听: 127.0.0.1:9337                                │
+│  - 默认配置目录: .local/browser-profile (0700 权限)       │
 │  - 人工完成登录，状态原生持久化于磁盘                      │
 └────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 三大状态载体的概念与职责边界
-
-在设计浏览器自动化工具时，必须清晰区分三种不同层面的“状态”：
+### 2.2 三大状态载体的职责与生命周期
 
 | 维度 | 运行态会话 (Session) | 持久化配置 (Browser Profile) | 便携认证快照 (Auth State) |
 |---|---|---|---|
 | **物理表现** | 正在运行的 Chrome 操作系统进程 | 本地磁盘目录（`.local/browser-profile`） | 单个 JSON 文件（`.local/auth-state.json`） |
-| **生命周期** | 从 `session open` 到 `session close` | 长期持久存在于本地磁盘 | 每次执行 `session save` 时原子替换 |
-| **所含内容** | 内存中的标签页、DOM 树、网络连接、CDP 管道 | 全量浏览器状态（Cookies、Cache、IndexedDB、证书、插件配置） | 提取的 Cookies、localStorage、IndexedDB（**不含 sessionStorage**） |
-| **定位与权衡** | Agent 交互的控制管道 | **主要登录态载体**，原汁原味维持登录状态 | **辅助可移植快照**，用于检查与离线备份 |
-| **有效性保证** | 仅在进程存活期有效 | 保留本机浏览器状态；能否跨重启登录需实测 | 不保证长期有效或跨设备恢复 |
-| **当前实现状态**| 已实现进程管理与 CDP 连接复用 | 已实现独立目录隔离与权限设置 | 已实现状态提取导出；**暂未实测加载至全新浏览器的能力，不暴露导入命令** |
-
-#### 权衡分析：为何以 Persistent Profile 为主，而非纯 State JSON？
-Persistent Profile 保留同一个本机浏览器的状态，避免每次启动重新拼装凭证。Storage State 只覆盖 cookies、localStorage 和可选 IndexedDB，不是完整 profile。两者都无法延长服务端会话寿命；跨重启登录效果需要用户登录后验证。
+| **生命周期** | 从 `session open` 到 `session close` | 长期持久存在于本地磁盘 | 每次执行 `session save` 时原子替换写入 |
+| **所含内容** | 内存中的标签页、网络连接、CDP 管道 | 完整的浏览器状态（Cookies、Cache、IndexedDB 等） | 导出的 Cookies、localStorage、IndexedDB（**不含 sessionStorage**） |
+| **定位与职责** | 控制命令接入的实时管道 | **主要登录态载体**，保持原生会话维持 | **辅助可移植快照**，用于备份及独立 context 隔离执行 |
+| **有效性保证** | 仅在进程存活期有效 | 保持本机浏览器状态；跨重启有效性待实测 | 取决于服务端 Cookie/Session 有效期，不可假定长期有效 |
 
 ---
 
-## 3. CDP 控制面与进程模型
+## 3. 业务执行模型与隔离机制
 
-### 3.1 独立进程与守护
-- 执行 `maven-skill session open` 时，工具以后台方式派生出独立的 Google Chrome 进程，并附加参数：
-  ```
-  --user-data-dir=.local/browser-profile
-  --remote-debugging-port=9337
-  --no-first-run
-  --no-default-browser-check
-  ```
-- 进程与发起该命令的 Python 脚本脱钩，避免脚本执行完毕后浏览器被意外销毁。
-- 当再次调用 `session open` 时，工具先探测目标端口。若已有存活的 Chrome 实例，则直接复用现有连接，**坚决不执行导航或覆盖操作**，以避免破坏用户正在人工操作的上下文。
+### 3.1 默认执行模式（持久 Context + 独立工作标签页）
+- 业务命令在已有 CDP 浏览器中执行时，默认通过 `browser.contexts[0]` 开辟全新的独立工作标签页（work tab）。
+- 工作标签页完成页面导航、DOM 观察或报表导出后，在 `finally` 块中自动执行 `page.close()`。
+- 该机制保证人类用户在浏览器中正在浏览的页面不被切换、覆盖或重载。
 
-### 3.2 状态探测 (`session status`) 语义约束
-- `session status` 的技术实现为向 `http://127.0.0.1:<PORT>/json/version` 发起 HTTP GET 请求。
-- 返回 `browser_connected: true` 仅代表 Chrome 调试服务可连通；连接后还核验 `Browser.getBrowserCommandLine` 中的 profile 路径，拒绝误接其他浏览器。登录有效性必须依赖实际页面观察。
-
-### 3.3 退出契约 (`session close`)
-- 执行关闭操作时，为防止用户最新交互产生的重要凭据丢失，CLI 会通过 Playwright 客户端先发起一次 `session save`，将当前上下文状态持久化至 `.local/auth-state.json`，随后再发送关闭指令退出 Chrome 进程。
+### 3.2 独立 Context 模式 (`--auth-state`)
+- 当指定全局 `--auth-state <FILE>` 参数时（参数必须写在子命令前），CLI 会调用 `browser.new_context(storage_state=auth_state)` 建立完全隔离的临时上下文。
+- 任务执行完毕后，临时上下文被显式关闭（`owned.close()`），不污染已有默认 profile 的运行环境。
+- `--auth-state` 的隔离逻辑已在自动化离线测试中得到验证。
 
 ---
 
-## 4. 安全与权限架构
+## 4. 业务 DOM 发现与交互契约
 
-1. **严格的回环绑定 (Loopback Only)**：
-   CDP 协议拥有任意执行 JavaScript、捕获网络流量与下载文件的特权。任何情况下，调试端口严禁绑定至 `0.0.0.0`，只能监听 `127.0.0.1`。
-2. **Unix 文件权限管控**：
-   - Profile 目录（`.local/browser-profile`）及父目录权限严格设为 `0700`（仅当前宿主用户可读写执行）。
-   - 导出的认证状态文件（`.local/auth-state.json`）权限严格设为 `0600`（仅当前宿主用户可读写）。
-3. **版本库防泄密**：
-   `.gitignore` 必须将 `.local/`、所有的临时下载文件、日志文件与 `.env` 完整隔离，防止带凭证代码意外外发。
+### 4.1 动态课程路径发现 (`courses list`)
+- 为避免硬编码组织或租户路径，CLI 从 `https://maven.com/` 首页发起探测。
+- 定位页面右上角账号菜单按钮（`button[aria-haspopup='menu']`）并触发点击。
+- 从弹出菜单中读取指向 Dashboard 的超链接，导航至 Dashboard 页面。
+- 从 Dashboard 中定位指向 `/admin/courses` 的 Courses 链接，进入课程管理视图。
+- 去重收集课程列表观察到的管理链接与标题，支持链接型分页；其他分页控件报告 partial，不宣称结果全量或只包含 PUBLISHED 状态。
+
+### 4.2 班期卡片解析与 `latest` 选期逻辑 (`cohorts list`)
+- 导航至课程管理概览页，定位包含 `Student home` 的班期卡片。
+- 对每个卡片，提取 `Student home` 链接中的 slug 以及对应 `settings` 链接中的 `cohort` 参数，双向核对一致后确认该班期的真实标识。
+- 解析班期状态（`upcoming`、`self_paced` 或常规已排期），并提取日期区间与起始日期。
+- **`latest` 判定算法**：
+  1. 若存在唯一的 `upcoming` 班期，直接判定为 `latest`；
+  2. 若存在多个 `upcoming` 班期，所有候选必须包含年份信息，依据年月日执行精确比较；缺少年份时拒绝仅凭月份排序；
+  3. 若无 `upcoming` 班期，在具有完整日期的非自学（non-self-paced）班期中选取起始时间最新的班期；
+  4. 遇到日期缺失年份、日期并列或列表不完整（partial）时，**坚决拒绝根据数字编号猜测最新班期**，直接报错退出。
+
+### 4.3 学员导出对话框与下载流拦截 (`students export`)
+- 依据解析出的班期 slug，拼装学员管理页面链接并访问。
+- 监控页面 `ENROLLED (<count>)` 状态按钮，等待数字从初始加载状态收敛稳定。
+- 定位下载按钮：Maven 学员管理页面的导出按钮为包含特定 SVG 路径（`M8.0625 10.3135L12 14.2499L15.9375 10.3135`）的图标按钮，无内部文本且无 `aria-label`。
+- **对话框分步交互**：
+  - 点击下载图标按钮，触发弹出 `Export Students` 对话框；
+  - 对话框包含 `Enrolled` 与 `Dropped off` 两个复选框；
+  - 程序确保 `Enrolled` 被勾选且 `Dropped off` 未被勾选；
+  - 读取对话框内标注的 Enrolled 人数，核验其与页面 Enrolled 人数完全吻合；
+  - 针对对话框内的 `Export Students` 确认按钮设置下载监听（`expect_download`）并点击触发。
+
+### 4.4 数据质量校验与审计收据
+- **CSV 内容校验**：
+  - 首行必须不是 HTML 标签或重定向错误页；
+  - 必须包含 `email`、`status`、`enrolled_at` 三个必需字段（当前观察到的全量格式为 11 列）；
+  - 所有数据行状态必须为 `enrolled`；
+  - 邮箱格式必须合法，且全部规范化邮箱去重后无重复；
+  - `enrolled_at` 必须为带时区信息的合法时间戳；
+  - CSV 数据行数必须严格等于页面展示的 Enrolled 计数。
+- **落盘与权限保护**：
+  - 导出的 CSV 文件权限设置为 `0600`；若目标路径已存在文件，拒绝覆盖。
+  - 在私有 `receipts/` 目录（`0700`）生成收据 JSON 文件（`0600`），记录来源、课程、班期、观察时间、行数、列名、SHA-256 校验和、字节数与文件绝对路径。
+  - 更新 `latest.json` 指针指向最新收据。收据与 CLI stdout 中绝不包含任何学员姓名与邮箱。
 
 ---
 
-## 5. 后续 UI 交互与业务迭代规划 (Future UI Iteration)
+## 5. 安全与错误处理规范
 
-当前版本聚焦于稳定会话底座。后续演进将按照以下阶段推进：
-
-```
-[Phase 1: 当前] ──► [Phase 2: 页面探测] ──► [Phase 3: 列表解析] ──► [Phase 4: CSV 流式导出]
- Session / CDP        DOM 稳定性走查         Cohort 分页遍历         下载拦截与内容校验
-```
-
-### 5.1 页面探测 (Phase 2)
-- 在实机环境中人工登录 Maven，走查 Dashboard 主视图。
-- 确立稳定的登录态特征选择器（例如右上角个人头像或主导航栏），为 `session status` 增加深度的页面级有效性验证。
-
-### 5.2 Cohort 列表解析 (Phase 3)
-- 调研 Maven 课程下的 Cohort 展示形式（判断其属于标准分页组件、无限滚动列表还是服务端渲染单页）。
-- 实现自动翻页机制，并在提取数据时显式标注数据范围与完整性元数据（例如总页数、已抓取页数）。
-
-### 5.3 报表 CSV 导出 (Phase 4)
-- 探索报表下载按钮的交互模式（直接链接触发 vs 异步生成导出）。
-- 实现下载流拦截，将文件统一保存至私有本地目录，并在完成后进行 MIME 与内容格式校验，确保下载产物是真实有效的 CSV 数据，而非重定向后的 HTML 报错页。
+1. **去敏感化错误信息**：捕获的所有底层网络或解析异常，输出至 stderr 时剥离任何私有 Token、Cookie 或开发机敏感信息。
+2. **只读保证**：工具仅提供观察与报表导出能力，杜绝提供任何写入接口。
