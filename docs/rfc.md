@@ -62,7 +62,7 @@ Maven Skill 用于观察 Maven（maven.com）平台的课程开设信息、班�
 ### 3.2 独立 Context 模式 (`--auth-state`)
 - 当指定全局 `--auth-state <FILE>` 参数时（参数必须写在子命令前），CLI 会调用 `browser.new_context(storage_state=auth_state)` 建立完全隔离的临时上下文。
 - 任务执行完毕后，临时上下文被显式关闭（`owned.close()`），不污染已有默认 profile 的运行环境。
-- `--auth-state` 的隔离逻辑已在自动化离线测试中得到验证。
+- `--auth-state` 的隔离逻辑通过离线测试，但实机 snapshot 登录恢复未通过：cookie 随请求送出后被服务端清除，对齐真实 Chrome UA 仍失败，原因尚未确定。持久 profile 已通过重启及 headless 业务验收，是主要复用路线；不得静默替换凭证来源或用匿名状态覆盖有效快照。
 
 ---
 

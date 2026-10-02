@@ -7,7 +7,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 
 本技能为 AI Agent 提供了通过 Chrome DevTools Protocol (CDP) 连接已由人工登录的 Google Chrome 浏览器实例，以只读方式观察 Maven（maven.com）平台课程状态、解析班期（Cohort）排期及安全导出已校验的报名学员（Enrolled）名单 CSV 的标准化操作流程。
 
-> **阶段状态说明**：已实现 v0.1 只读业务 CLI（包括 `courses list`、`cohorts list` 及 `students export`）。实机环境下，默认 Profile 模式下的课程发现、班期解析与 Enrolled CSV 导出及数据校验已实测通过，执行过程中用户原有标签页完好保留。基于 `--auth-state` 的独立上下文已通过离线单元测试，实机验收准备就绪；跨 Chrome 进程重启的登录态保持仍待实测。
+> **阶段状态说明**：默认持久 profile 路线已通过独立 agent 的课程发现、最新班期选择和 CSV 导出验收，亦通过关闭重启及临时 headless 运行。`--auth-state` 隔离逻辑通过离线测试，但实机新 context 的认证恢复失败；该选项属于实验路径，不保证可移植登录。
 
 ---
 
@@ -94,6 +94,8 @@ maven-skill students export --course <COURSE_ADMIN_URL> --cohort <COHORT_SLUG> [
 maven-skill --auth-state .local/auth-state.json courses list
 ```
 - 全局选项 `--auth-state` 必须放在子命令前。该模式在已有浏览器中开辟独立 Context 执行，完成即销毁临时 Context。
+- 实测 Maven 会清除传入新 context 的认证 cookie，即使刚执行 `session save`。失败时明确报告 snapshot 认证未通过，不把 profile 验收冒充 snapshot 成功，不把匿名 context 的状态写回有效快照。默认用持久 profile 保存的登录态；若用户允许该路线，省略 `--auth-state` 重试。
+- 用户屏幕共享时，不打开可见窗口。可用用户授权的本地临时 wrapper 启动 headless Chrome，复用同一 profile 和 CDP；不要永久修改 CLI 默认值。
 
 ---
 

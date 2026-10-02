@@ -143,6 +143,10 @@ CLI 统一入口为 `maven-skill`，执行结果均输出标准 JSON。
   ```
   全局参数 `--auth-state` 必须置于子命令之前。该模式在已有 CDP 浏览器中建立临时 context，完成数据提取后即时销毁临时 context，不影响其他标签页。
 
+  **认证快照加载属于实验路径。** 独立实机验收中，刚刷新的 cookie 快照虽然随请求送出，Maven 首页仍返回未登录状态并清除认证 cookie；复用持久 profile 则可以正常查询和导出。原因尚未确定，不应归因为单纯过期或浏览器指纹。快照模式失败时不要覆盖有效快照，也不要静默切换凭证来源；明确选择默认 profile 路线继续，必要时人工重新登录。
+
+持久 profile 已通过关闭 Chrome 后重启的登录复用，以及独立 agent 的 headless CSV 导出验收。临时 headless 可由本地 Chrome 启动 wrapper 加入 `--headless=new`，经 `MAVEN_CHROME_EXECUTABLE` 指定；登录配置仍默认可见窗口，公开 CLI 默认行为不变。
+
 ---
 
 ## 安全与隐私规范
