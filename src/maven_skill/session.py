@@ -28,6 +28,7 @@ def validate_url(url: str) -> str:
 
 def private_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.parent.chmod(0o700)
     fd, name = tempfile.mkstemp(dir=path.parent, prefix=".state-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as stream:
@@ -42,6 +43,10 @@ def private_json(path: Path, value: dict) -> None:
 
 class Session:
     def __init__(self, data_dir: Path, port: int):
+        try:
+            port = int(port)
+        except (TypeError, ValueError):
+            raise ValueError("CDP port must be an integer") from None
         if not 1024 <= port <= 65535:
             raise ValueError("CDP port must be between 1024 and 65535")
         self.root = data_dir.expanduser().resolve()

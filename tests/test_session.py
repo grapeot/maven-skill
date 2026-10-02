@@ -1,5 +1,6 @@
 import json
 import stat
+from pathlib import Path
 
 import pytest
 
@@ -39,6 +40,44 @@ def test_wrong_profile_is_rejected_before_browser_use(tmp_path):
             return CDP()
     with pytest.raises(ValueError, match="different browser profile"):
         Session(tmp_path, 9337).verify_browser(Browser())
+
+
+def test_string_port_is_accepted_and_invalid_port_is_rejected(tmp_path):
+    assert Session(tmp_path, "9337").port == 9337
+    with pytest.raises(ValueError):
+        Session(tmp_path, "80")
+    with pytest.raises(ValueError):
+        Session(tmp_path, "nope")
+
+
+def test_cli_port_default_is_int_and_business_commands_parse(monkeypatch):
+    from maven_skill.cli import build_parser, resolve_port
+
+    monkeypatch.delenv("MAVEN_CDP_PORT", raising=False)
+    parser = build_parser()
+    status = parser.parse_args(["session", "status"])
+    assert resolve_port(status.port) == 9337
+    export = parser.parse_args([
+        "--auth-state", "state.json",
+        "students", "export",
+        "--course", "https://maven.com/example-school/admin/courses/example-course",
+        "--cohort", "latest",
+        "--output", "out.csv",
+    ])
+    assert export.auth_state == Path("state.json")
+    assert export.cohort == "latest"
+    with pytest.raises(SystemExit):
+        parser.parse_args(["students", "export", "--course", "https://maven.com/example-school/admin/courses/example-course"])
+
+
+def test_invalid_port_env_is_a_configuration_error(monkeypatch, capsys):
+    from maven_skill.cli import main
+
+    monkeypatch.setenv("MAVEN_CDP_PORT", "not-a-port")
+    assert main(["session", "status"]) == 1
+    error = capsys.readouterr().err
+    assert "not-a-port" not in error
+    assert "invalid" in error
 
 
 def test_disconnected_status_does_not_claim_login(tmp_path, monkeypatch):

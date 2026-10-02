@@ -4,13 +4,16 @@ import os
 from pathlib import Path
 import sys
 
+from maven_skill.errors import MavenError
+from maven_skill.ops import export_students, list_cohorts, list_courses, run_business
 from maven_skill.session import Session
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="maven-skill")
     parser.add_argument("--data-dir", type=Path, default=os.getenv("MAVEN_DATA_DIR", ".local"))
-    parser.add_argument("--port", type=int, default=os.getenv("MAVEN_CDP_PORT", "9337"))
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--auth-state", type=Path)
     groups = parser.add_subparsers(dest="group", required=True)
     sessions = groups.add_parser("session").add_subparsers(dest="action", required=True)
     sessions.add_parser("open").add_argument("--url", default="https://maven.com/")
@@ -19,24 +22,67 @@ def main() -> int:
     pages = groups.add_parser("page").add_subparsers(dest="action", required=True)
     pages.add_parser("snapshot")
     pages.add_parser("goto").add_argument("url")
-    args = parser.parse_args()
+    courses = groups.add_parser("courses").add_subparsers(dest="action", required=True)
+    courses.add_parser("list")
+    cohorts = groups.add_parser("cohorts").add_subparsers(dest="action", required=True)
+    cohorts.add_parser("list").add_argument("--course", required=True)
+    students = groups.add_parser("students").add_subparsers(dest="action", required=True)
+    export = students.add_parser("export")
+    export.add_argument("--course", required=True)
+    export.add_argument("--cohort", required=True)
+    export.add_argument("--output", type=Path)
+    return parser
+
+
+def resolve_port(explicit: int | None) -> int:
+    if explicit is not None:
+        return explicit
+    raw = os.getenv("MAVEN_CDP_PORT")
+    if raw is None or raw.strip() == "":
+        return 9337
     try:
-        session = Session(args.data_dir, args.port)
+        port = int(raw.strip())
+    except (TypeError, ValueError):
+        raise MavenError("CDP port configuration is invalid") from None
+    if not 1024 <= port <= 65535:
+        raise MavenError("CDP port configuration is invalid")
+    return port
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        session = Session(args.data_dir, resolve_port(args.port))
         if args.group == "page":
             result = session.page(args.url if args.action == "goto" else None)
-        elif args.action == "open":
+        elif args.group == "session" and args.action == "open":
             result = session.open(args.url)
-        elif args.action == "status":
+        elif args.group == "session" and args.action == "status":
             result = session.status()
-        else:
+        elif args.group == "session":
             result = session.save(close=args.action == "close")
+        elif args.group == "courses":
+            result = run_business(session, args.auth_state, list_courses)
+        elif args.group == "cohorts":
+            result = run_business(
+                session, args.auth_state, lambda page: list_cohorts(page, args.course)
+            )
+        else:
+            result = run_business(
+                session,
+                args.auth_state,
+                lambda page: export_students(
+                    page, args.course, args.cohort, args.output, session.root
+                ),
+            )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     except Exception as exc:
-        # Exception messages from browser protocols can contain URLs/tokens.
-        print(json.dumps({"error": type(exc).__name__, "message":
-                          str(exc) if isinstance(exc, (ValueError, TimeoutError))
-                          else "Browser operation failed; inspect session status locally"}), file=sys.stderr)
+        message = str(exc) if isinstance(exc, (MavenError, ValueError, TimeoutError)) else (
+            "Browser operation failed; inspect session status locally"
+        )
+        print(json.dumps({"error": type(exc).__name__, "message": message}), file=sys.stderr)
         return 1
 
 
