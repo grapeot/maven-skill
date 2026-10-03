@@ -147,6 +147,10 @@ CLI 统一入口为 `maven-skill`，执行结果均输出标准 JSON。
 
 持久 profile 已通过关闭 Chrome 后重启的登录复用，以及独立 agent 的 headless CSV 导出验收。临时 headless 可由本地 Chrome 启动 wrapper 加入 `--headless=new`，经 `MAVEN_CHROME_EXECUTABLE` 指定；登录配置仍默认可见窗口，公开 CLI 默认行为不变。
 
+### 4. Lightning Lesson 参考
+
+[`skills/maven/references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) 记录了 Lightning Lesson 管理界面的导航路径、编辑器字段限制（标题 ≤ 60、outcome 描述 ≤ 120、`topic_desc` ≤ 450 等）与行为坑点（字段自动保存、创建与删除讲师无确认、事件链接是硬性发布阻断项）。CLI 不实现任何编辑器写入；Publish、创建 Zoom 会议、promo code 与邮件始终由人类操作。
+
 ---
 
 ## 安全与隐私规范

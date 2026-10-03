@@ -36,6 +36,9 @@ description: Connect to an authenticated Maven browser session via CDP to observ
   - 跨目录调用请设置 `MAVEN_DATA_DIR` 环境变量为绝对路径；自定义端口通过 `MAVEN_CDP_PORT` 注入。
   - **CLI 不会自动读取 `.env` 文件**。
 
+- **参考资料**：
+  - [Lightning Lesson 管理界面参考](references/lightning_lessons.md)：导航路径、编辑器字段限制、自动保存与无确认写入等坑点，以及只读安全边界。涉及 Lightning Lesson 的任务先读此文件。
+
 ---
 
 ## 3. 操作工作流 (Workflow)
