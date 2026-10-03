@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-10-03: Lightning Lesson 管理界面观察记录
+
+### 1. 今日完成工作
+- 新增 `skills/maven/references/lightning_lessons.md`，并从 `SKILL.md` 与 `README.md` 链接。内容为对 Lightning Lesson 管理界面的人工观察：导航路径（列表、编辑器、已发布课程的 overview / signups / settings 标签页）、编辑器字段契约与字符上限、Maven 帮助中心的推广节奏与到场率经验值。
+- 本轮仅为文档变更，CLI 行为与测试数量不变。
+
+### 2. 观察到的坑点
+1. 点击 “Create a Lightning Lesson” 立即创建草稿，无确认。
+2. 编辑器没有保存按钮，字段自动保存；输入即写入，属于需要授权的业务写操作。
+3. 新草稿只有一条 learning outcome，折叠的 outcome 卡片需点开才会显示输入框。
+4. 新草稿自动加入与组织 expert profile 同步的讲师条目，可能是机构且必填 bio 为空；“Delete instructor” 无确认即生效。
+5. 事件链接是硬性发布阻断项；唯一的链接选项会创建真实 Zoom 会议。
+6. 管理界面只有回放观看人数，没有现场到场人数。
+7. 临时探测脚本崩溃会在用户浏览器中留下工作标签页，必须在 `finally` 中关闭。
+
+---
+
 ## 2026-10-02: v0.1 业务命令实现与工程落地
 
 ### 1. 今日完成工作
