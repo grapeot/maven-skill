@@ -5,7 +5,15 @@ from pathlib import Path
 import sys
 
 from maven_skill.errors import MavenError
-from maven_skill.ops import export_students, list_cohorts, list_courses, run_business
+from maven_skill.ops import (
+    export_students,
+    lessons_stats,
+    list_cohorts,
+    list_courses,
+    list_lessons,
+    run_business,
+    show_lesson,
+)
 from maven_skill.session import Session
 
 
@@ -31,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--course", required=True)
     export.add_argument("--cohort", required=True)
     export.add_argument("--output", type=Path)
+    lessons = groups.add_parser("lessons").add_subparsers(dest="action", required=True)
+    lessons.add_parser("list")
+    lessons.add_parser("show").add_argument("--lesson", required=True)
+    stats = lessons.add_parser("stats").add_mutually_exclusive_group(required=True)
+    stats.add_argument("--lesson")
+    stats.add_argument("--all", action="store_true", dest="all_lessons")
     return parser
 
 
@@ -67,6 +81,18 @@ def main(argv: list[str] | None = None) -> int:
         elif args.group == "cohorts":
             result = run_business(
                 session, args.auth_state, lambda page: list_cohorts(page, args.course)
+            )
+        elif args.group == "lessons" and args.action == "list":
+            result = run_business(session, args.auth_state, list_lessons)
+        elif args.group == "lessons" and args.action == "show":
+            result = run_business(
+                session, args.auth_state, lambda page: show_lesson(page, args.lesson)
+            )
+        elif args.group == "lessons":
+            result = run_business(
+                session,
+                args.auth_state,
+                lambda page: lessons_stats(page, args.lesson, args.all_lessons),
             )
         else:
             result = run_business(

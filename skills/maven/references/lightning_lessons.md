@@ -50,11 +50,24 @@
 - **Signups**：报名者列表。
 - 管理界面**没有**现场到场人数统计。
 
+### 只读读取所依赖的页面结构
+
+以下结构是 `maven-skill lessons` 命令的读取契约，页面改版时优先核对这里：
+
+- **列表分组是 `<details>`**：`Drafts (N)` / `Upcoming (N)` / `Past (N)` 是 `<summary>` 文本（大写由 CSS 渲染）。Past 分组默认折叠，折叠时卡片的 `innerText` 为空，需读 `textContent`。卡片的 `<li>` 依次给出 `Draft`，或 `N students` 与 `Tue, Mar 3, 2026, 9:00AM PST` 形式的时间。
+- **路由**：`/<org>/admin/lightning-lessons/<id>` 对草稿跳转到 `/edit`，对已发布课程跳转到 `?tab=overview`，可据此区分是否已发布。
+- **已发布课程的内嵌数据**：overview / signups / settings 页面的 `__NEXT_DATA__` 中 `adminPublishedWorkshop` 含 `signup_count`、`recording_unique_viewer_count`、`is_canceled`、`is_delisted`、开始时间与时长等字段，同时也含事件链接、当前用户邮箱等私有字段；只读命令在浏览器内就只挑出聚合字段，私有字段不离开页面。编辑器页面的 `__NEXT_DATA__` 不含课程内容，草稿只能读 DOM。
+- **编辑器 DOM**：各区块 id 为 `free-lesson-section-details` / `-learningOutcomes` / `-topic` / `-instructors`。折叠 outcome 卡片的输入框仍在 DOM 中，可直接读 `value`；每个输入旁有 `N/M` 计数器。开始时间与时长是 react-select，显示值是 `Start time` / `Duration` 标题后的文本。事件链接已设置时按钮为 “Update event link”（同时会显示链接本身），未设置时为 “Add event link”。有问题的 outcome / 讲师卡片带 `data-error="true"`。
+- **页头**：未完成时显示 `N% Complete`，存在校验错误时显示 `Review N errors`；已发布课程的编辑器可能只显示 `Review N errors` 而没有百分比。
+- **两个报名数**：内嵌数据的 `signup_count` 与列表卡片的 `N students` 一致；Signups 标签页标题的 `N signups` 通常更小，差异原因未确认，不做调和。
+- **报名时间**：Signups 标签页只显示 “a month ago” 一类相对时间，与姓名、邮箱同处分页表格；精确时间戳只能来自页面背后的未公开 API，本工具不调用。
+- **打开编辑器本身不触发自动保存**：多次只读打开同一已发布 lesson 的编辑器后，其内嵌数据中的 `updated_at` 未变化。
+
 ---
 
 ## 4. 安全边界
 
-- 以上均为观察记录；`maven-skill` CLI 保持只读，不实现任何编辑器写入。
+- 以上均为观察记录；`maven-skill` CLI 保持只读，不实现任何编辑器写入。只读命令为 `lessons list`、`lessons show`、`lessons stats`（见 `SKILL.md` 步骤 5），它们不点击、不输入，事件链接只输出布尔值。
 - 编辑器中的任何写操作（**包括仅仅输入文字**，因为字段自动保存）都属于业务写入，必须先获得人类用户的单独显式授权。
 - Publish、Create a Zoom meeting、创建 promo code、发送邮件始终是人类操作，Agent 不代为执行。
 - 只读观察时也要避免点击 “Create a Lightning Lesson”“Delete instructor”“Add outcome” 等会立即产生写入的控件。

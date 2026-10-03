@@ -1,6 +1,6 @@
 ---
 name: maven
-description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, and export validated Enrolled student CSV reports.
+description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports, and read Lightning Lesson drafts and aggregate stats without writing.
 ---
 
 # Maven Agent Skill
@@ -91,7 +91,30 @@ maven-skill students export --course <COURSE_ADMIN_URL> --cohort <COHORT_SLUG> [
   - 在私有 `receipts/` 目录（`0700`）生成包含 SHA-256、行数、观察时间与路径的收据文件（`0600`），并更新 `latest.json`。
   - 操作完成后自动关闭工作标签页，用户原有标签页保持原貌。
 
-### 步骤 5: 隔离上下文模式（可选）
+### 步骤 5: 只读查看 Lightning Lesson (`lessons list` / `lessons show` / `lessons stats`)
+先读 [Lightning Lesson 管理界面参考](references/lightning_lessons.md)。三个命令只导航和读取，不点击任何可写控件，不输入任何文字：
+```bash
+# 列出全部 Lightning Lesson（草稿 / 即将开始 / 已结束）
+maven-skill lessons list
+
+# 查看单个 lesson 的编辑器字段、字符数与发布阻断项（ID 或管理页 URL 均可）
+maven-skill lessons show --lesson <LESSON_ID_OR_ADMIN_URL>
+
+# 已发布 lesson 的聚合统计（单个或全部）
+maven-skill lessons stats --lesson <LESSON_ID_OR_ADMIN_URL>
+maven-skill lessons stats --all
+```
+- **内部契约**：
+  - 组织路径从账号菜单 → Dashboard 动态发现（与 `courses list` 相同的菜单步骤，菜单按钮先过点击守卫）；传入管理页 URL 时跳过发现。
+  - `lessons list` 从列表页 `<details>` 分组（Drafts / Upcoming / Past）读取卡片：ID、标题、状态、管理页 URL，以及卡片上可见的日期时间与报名人数。分组声明数量与解析数量不一致、出现未知分组、游离卡片或翻页控件时报告 `completeness.status=partial`。
+  - `lessons show` 先打开 `/<id>`：草稿会跳转到 `/edit`，已发布课程跳转到 overview 标签页，并从页面内嵌的 `__NEXT_DATA__` 中只取聚合字段（报名数、回放观看数、开始时间、时长、是否取消/下架/上架 marketplace、是否关联课程与 promo code）。随后读取编辑器 DOM：标题、日期、开始时间、时区、时长、outcome 标题与字符数、`topic_desc` 字符数（对照页面 `N/M` 计数器或默认上限）、讲师姓名、`N% Complete`、`Review N errors`、带 `data-error="true"` 的卡片、可见的行内错误，以及据此推导的检查项（如缺少事件链接）。折叠卡片的输入框直接从 DOM 读值，不点开。
+  - **事件链接只输出布尔值 `event_link_set`**，从不输出链接本身；输出前统一扫描，含邮箱或会议链接时拒绝打印。
+  - 编辑器完成后，Maven 页头只剩 Preview 与 Publish，此时 `completion_percent` 为 `null`、`header_reports_complete` 为 `true`。
+  - `lessons stats` 只输出聚合数：内嵌数据的 `signup_count`、Signups 标签页标题的 `N signups`（两者可能不同，不做调和）、回放观看数（内嵌数据与 overview 文字交叉核对）。管理界面没有现场到场人数，`live_attendance` 恒为 `null`。
+  - **不提供报名日期直方图**：Signups 标签页只在分页表格中、紧挨姓名与邮箱显示粗粒度相对时间（如 “a month ago”），精确时间戳只能来自未公开 API；按仓库规则不逆向私有接口，因此 `signup_date_histogram.available=false` 并附原因。
+  - 所有 lesson 页面通过 `ReadOnlyPage` 访问：只有导航与登记过的只读脚本，没有 click / fill / type / keyboard / locator 接口；点击守卫拒绝 Publish、Create a Lightning Lesson、Create a Zoom meeting、Delete instructor、Save 等标签及含写入动词的控件。工作标签页在 `finally` 中关闭。
+
+### 步骤 6: 隔离上下文模式（可选）
 如需通过既有认证状态快照在独立上下文中执行：
 ```bash
 maven-skill --auth-state .local/auth-state.json courses list
@@ -106,7 +129,7 @@ maven-skill --auth-state .local/auth-state.json courses list
 
 向用户交付任务结果时，输出应遵循以下规范：
 1. **当前会话状态**：明确说明 CDP 端口与浏览器连接情况。
-2. **业务操作摘要**：列出操作的课程名称/URL 及班期标识。
+2. **业务操作摘要**：列出操作的课程名称/URL 及班期标识；Lightning Lesson 任务列出 lesson ID、状态与发布阻断项。
 3. **统计数据与产物指标**：报告已导出的 Enrolled 学员人数、CSV 文件相对路径、文件大小及 SHA-256 校验和。
 4. **零 PII 原则**：CLI stdout 与回复中**严禁打印任何学员的真实姓名或邮箱地址**。
 
@@ -120,7 +143,11 @@ maven-skill --auth-state .local/auth-state.json courses list
 - [x] 学员导出命令能够完成对话框交互、下载 Enrolled CSV 并通过全部数据有效性校验。
 - [x] 导出产物生成符合规范的 SHA-256 审计收据，权限控制严格（目录 `0700`，文件 `0600`）。
 - [x] 业务命令执行过程中，用户在浏览器中原有的标签页不受干扰。
-- [x] 38 项离线单元测试与隐私检查全部通过。
+- [x] `lessons list` 动态定位 Lightning Lessons 列表，输出 ID、标题、状态与可见的日期和报名数，并声明完整性。
+- [x] `lessons show` 读取草稿与已发布 lesson 的字段、字符数对照上限、完成度与可见发布错误；事件链接只输出布尔值。
+- [x] `lessons stats` 只输出聚合报名数与回放观看数；报名日期直方图因需要未公开 API 而明确标记不可用。
+- [x] lessons 命令不点击、不输入；点击守卫与只读页面门面有单元测试覆盖。
+- [x] 138 项离线单元测试与隐私检查全部通过。
 
 ---
 

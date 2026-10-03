@@ -19,7 +19,7 @@
 source .venv/bin/activate
 pytest
 ```
-当前套件共包含 **38 项自动化测试**，全部保持通过。
+当前套件共包含 **138 项自动化测试**（含参数化用例），全部保持通过。
 
 ### 2.1 会话管理与 CDP 安全测试 (`tests/test_session.py`)
 - **导航 URL 安全过滤**：限制仅允许 `maven.com` 域名下的 HTTPS 链接，阻断非 Maven 域、HTTP 协议以及携带账号密码凭据的 URL。
@@ -54,6 +54,16 @@ pytest
 - **`--auth-state` 上下文隔离**：验证基于状态快照创建全新的独立 Context，执行完毕后关闭临时 Context，完全不影响主 Context。
 - **快照文件不存在处理**：传入不存在的快照路径时报错退出，不触发任何浏览器上下文创建。
 
+### 2.4 Lightning Lesson 只读命令测试 (`tests/test_lessons.py`)
+- **列表解析**：手写虚拟分组数据，验证状态、日期时间与报名数解析；分组数量不符、未知分组、游离卡片、翻页控件或非 lesson 链接时报告 partial。
+- **lesson 引用**：接受 ID、管理页 URL、`/edit` 与带 `tab` 的 URL；拒绝非 maven.com、非 HTTPS、非 lesson 路径与不安全 ID。
+- **字段与上限**：优先使用页面 `N/M` 计数器，否则按默认上限计算；超限、缺链接、`data-error` 卡片、`Review N errors`、完成度与“完成后页头只剩 Publish”的判定。
+- **已发布聚合数据**：只保留聚合字段，`phase` 判定（past / upcoming / canceled），异常计数类型置空；输出中不含会议链接。
+- **隐私断言**：标题、讲师名、行内错误中的邮箱被丢弃；`assert_public_output` 对邮箱、`zoom.us` 与 `pwd=` 拒绝输出；命令级测试断言 stdout JSON 中无邮箱。
+- **点击守卫与只读门面**：拒绝 Publish、Create a Lightning Lesson、Create a Zoom meeting、Delete instructor、Save 等标签与写入动词；`ReadOnlyPage` 不暴露 click / fill / type / keyboard / locator 等接口，只执行登记过的脚本，只导航到 maven.com；静态检查登记脚本不含 `.click(`、赋值、`fetch` 等写入模式。
+- **命令编排**：用记录调用的假页面跑 `list` / `show` / `stats`，断言零点击零输入；管理页 URL 跳过组织发现；内嵌数据属于其他 lesson 时拒绝；草稿 stats 报告未发布。
+- **生命周期与 CLI**：命令失败时工作标签页仍关闭；`stats` 必须且只能指定 `--lesson` 或 `--all`；意外异常输出经脱敏，不含 token、邮箱或路径。
+
 ---
 
 ## 3. 实机验证状态清单 (Empirical Verification Status)
@@ -65,4 +75,5 @@ pytest
 | **默认 Profile 业务命令实测** | 验证 `courses list`、`cohorts list` 及 `students export` | 已实测通过 | 课程列表与班期解析正确，Enrolled CSV 成功下载并通过全部数据校验，原用户标签页完好保留 |
 | **`--auth-state` 独立上下文实机验证** | 在同一 Chrome 中建立新 context，载入快照并认证 | 认证失败 | 新鲜 cookie 已发送但被服务端清除；不能静默回退 profile 或覆盖有效快照 |
 | **跨 Chrome 重启登录态保持** | 关闭后重启同一 profile，验证是否保留登录 | 通过 | 临时 headless Chrome 中登录保持，业务查询正常 |
+| **Lightning Lesson 只读命令** | `lessons list`、草稿与已结束 lesson 的 `lessons show`、`lessons stats --lesson` 与 `--all` | 已实测通过 | 列表完整性 complete；字段、计数器、链接布尔值、发布错误与聚合统计正确；输出无邮箱与会议链接；运行前后浏览器标签页集合一致，未修改任何 lesson |
 | **独立 agent headless 导出** | 动态发现课程、选择 latest、导出并与首份 CSV 比较 | 通过 | 行数、全列值、规范化邮箱/时间集合一致，输出与 receipt 私有；仅验证 profile 路线 |
