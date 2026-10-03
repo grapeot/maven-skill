@@ -147,9 +147,32 @@ CLI 统一入口为 `maven-skill`，执行结果均输出标准 JSON。
 
 持久 profile 已通过关闭 Chrome 后重启的登录复用，以及独立 agent 的 headless CSV 导出验收。临时 headless 可由本地 Chrome 启动 wrapper 加入 `--headless=new`，经 `MAVEN_CHROME_EXECUTABLE` 指定；登录配置仍默认可见窗口，公开 CLI 默认行为不变。
 
-### 4. Lightning Lesson 参考
+### 4. Lightning Lesson 只读命令 (`lessons`)
 
-[`skills/maven/references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) 记录了 Lightning Lesson 管理界面的导航路径、编辑器字段限制（标题 ≤ 60、outcome 描述 ≤ 120、`topic_desc` ≤ 450 等）与行为坑点（字段自动保存、创建与删除讲师无确认、事件链接是硬性发布阻断项）。CLI 不实现任何编辑器写入；Publish、创建 Zoom 会议、promo code 与邮件始终由人类操作。
+- **列出 lesson**：
+  ```bash
+  maven-skill lessons list
+  ```
+  从账号菜单动态进入 Dashboard 与 Lightning Lessons 列表，输出每个 lesson 的 ID、标题、状态（`draft` / `upcoming` / `past`）、管理页 URL，以及卡片上可见的日期时间与报名人数；分组计数对不上时报告 `completeness.status=partial`。
+
+- **查看单个 lesson**：
+  ```bash
+  maven-skill lessons show --lesson <LESSON_ID_OR_ADMIN_URL>
+  ```
+  读取编辑器字段（标题、日期、开始时间、时区、时长、outcome 与 `topic_desc` 的字符数对照上限、讲师姓名）、完成度、`Review N errors`、标记错误的卡片与推导出的发布阻断项；已发布 lesson 另从页面内嵌数据读取聚合字段。事件链接只输出布尔值。
+
+- **聚合统计**：
+  ```bash
+  maven-skill lessons stats --lesson <LESSON_ID_OR_ADMIN_URL>
+  maven-skill lessons stats --all
+  ```
+  输出报名数（页面内嵌数据与 Signups 标签页标题两个来源）、回放观看数与合计。报名日期直方图不提供：精确报名时间只能来自未公开 API，本工具不调用。
+
+lessons 命令只导航和读取：所有 lesson 页面经只读门面访问，没有点击或输入接口，Publish、Create a Zoom meeting、Delete instructor、Save 等控件被点击守卫拒绝。stdout 输出前统一扫描，含邮箱或会议链接时拒绝打印。
+
+### 5. Lightning Lesson 参考
+
+[`skills/maven/references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) 记录了 Lightning Lesson 管理界面的导航路径、编辑器字段限制（标题 ≤ 60、outcome 描述 ≤ 120、`topic_desc` ≤ 450 等）与行为坑点（字段自动保存、创建与删除讲师无确认、事件链接是硬性发布阻断项）。CLI 只提供上面的只读 `lessons` 命令，不实现任何编辑器写入；Publish、创建 Zoom 会议、promo code 与邮件始终由人类操作。
 
 ---
 
@@ -161,7 +184,7 @@ CLI 统一入口为 `maven-skill`，执行结果均输出标准 JSON。
    - 导出 CSV、认证快照文件及收据文件权限为 `0600`；
    - 导出的 CSV 文件若已存在，拒绝覆盖已有文件。
 3. **敏感文件全量忽略**：`.local/` 目录、下载文件、运行日志及 `.env` 均加入 `.gitignore`，严禁提交到代码仓库。
-4. **只读业务边界**：本工具仅用于只读观察与名单导出。严禁修改课程或学生数据，严禁发送邀请，严禁调用任何外部结算或记账写入接口。
+4. **只读业务边界**：本工具仅用于只读观察、名单导出与 Lightning Lesson 只读查看。严禁修改课程或学生数据，严禁发送邀请，严禁调用任何外部结算或记账写入接口。
 5. **脱敏与脱密**：业务命令 stdout 绝不打印学员姓名与邮箱。公共仓库中仅使用虚拟示例。
 
 ---

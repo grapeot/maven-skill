@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-03（续）: Lightning Lesson 只读命令
+
+### 1. 完成工作
+- 新增 `lessons list`、`lessons show --lesson <ID_OR_ADMIN_URL>`、`lessons stats (--lesson ... | --all)`。纯解析函数在 `parse.py`，浏览器编排与只读脚本在 `ops.py`，CLI 接线在 `cli.py`；沿用 `run_business` / `work_page` 工作标签页生命周期。
+- 只读护栏：lesson 页面全部经 `ReadOnlyPage` 访问（只有导航与登记脚本，无 click / fill / type / keyboard / locator）；`assert_click_allowed` 拒绝写入类控件标签，并接入共享的账号菜单步骤；输出前 `assert_public_output` 拒绝邮箱与会议链接。
+- 测试由 38 项增至 138 项（含参数化），新增 `tests/test_lessons.py`，全部使用手写虚拟数据。
+- 文档：`SKILL.md` 步骤 5 与验收标准、`README.md`、`references/lightning_lessons.md`（读取契约）、`docs/test.md`、`docs/prd.md`、`AGENTS.md` 测试数与命令范围。
+
+### 2. 实机只读验证（只记录聚合结论）
+- [x] `lessons list`：三个分组的声明数与解析数一致，`completeness=complete`；连续 4 次运行稳定。
+- [x] `lessons show`：一个草稿与一个已结束 lesson；日期、开始时间、时区、时长、计数器、链接布尔值、讲师错误标记与 `Review N errors` 一致；已发布 lesson 的回放观看数在内嵌数据与 overview 文字间一致。
+- [x] `lessons stats --lesson` 与 `--all`：只输出聚合数；所有输出 grep 无邮箱与会议链接。
+- [x] 每次运行前后浏览器标签页集合一致，未留下工作标签页；未点击、未输入、未修改任何 lesson。
+
+### 3. 问题与解决
+1. 已发布 lesson 的编辑器页头没有 `N% Complete`，最初的就绪条件因此超时；改为等待标题输入框、讲师区块与开始时间显示值。
+2. Past 分组默认折叠，`innerText` 为空；列表与计数读取改用 `textContent`。
+3. 回放观看数的数字与说明文字不在同一叶子节点，改为匹配短文本容器。
+4. 完成的草稿页头只剩 Preview 与 Publish，无百分比；输出 `header_reports_complete=true` 而不臆造 100%。
+5. 报名日期直方图跳过：精确时间只能来自未公开 API，Signups 标签页只有与 PII 同处的相对时间。
+6. 一次运行中账号菜单未及时展开导致发现失败，重跑即通过；属于共享步骤的偶发时序问题，未改动其等待逻辑。
+
+---
+
 ## 2026-10-03: Lightning Lesson 管理界面观察记录
 
 ### 1. 今日完成工作

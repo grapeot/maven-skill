@@ -11,16 +11,26 @@ from urllib.parse import urlsplit
 
 from maven_skill.errors import MavenError
 from maven_skill.parse import (
+    assert_click_allowed,
+    assert_public_output,
     assert_unique_slugs,
     choose_cohort,
     choose_students_nav,
     course_admin_path,
     dedupe_courses,
+    lesson_admin_url,
+    lessons_admin_base,
     parse_cohort_card,
+    parse_lesson_list,
+    parse_lesson_ref,
+    parse_recording_viewers,
+    parse_signups_tab,
     refuse_partial_latest,
     reserve_output,
     safe_slug_token,
     students_url_for,
+    summarize_editor,
+    summarize_published,
     validate_students_csv,
 )
 from maven_skill.session import Session, private_json, validate_url
@@ -162,6 +172,13 @@ def _dashboard_href(page) -> str:
     for index in range(buttons.count()):
         button = buttons.nth(index)
         if not button.is_visible():
+            continue
+        try:
+            name = " ".join(
+                f"{button.inner_text(timeout=5000)} {button.get_attribute('aria-label') or ''}".split()
+            )
+            assert_click_allowed(name)
+        except Exception:
             continue
         try:
             button.click(timeout=5000)
@@ -557,3 +574,424 @@ def _display_path(path: Path) -> str:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+# --- Lightning Lessons (read-only) -------------------------------------------------
+#
+# Lessons commands only navigate and read. After org discovery (the shared account
+# menu step, which passes the click guard), every lesson page is driven through
+# ReadOnlyPage: it exposes navigation and a fixed set of read-only scripts, and has
+# no click, fill, type, keyboard, or locator surface at all. The Lightning Lesson
+# editor autosaves, so typing would already be a business write.
+
+LESSONS_NAV_JS = """() => {
+  const path = location.pathname.replace(/\\/$/, '');
+  const org = path.split('/')[1] || '';
+  const item = [...document.querySelectorAll('a')].find(el => {
+    try {
+      const target = new URL(el.href).pathname.replace(/\\/$/, '');
+      return target === '/' + org + '/admin/lightning-lessons';
+    } catch (e) { return false; }
+  });
+  return item ? item.href : null;
+}"""
+LESSONS_LIST_READY_JS = """() => {
+  const label = /^(drafts|upcoming|past)\\s*\\(\\s*\\d+\\s*\\)$/i;
+  if ([...document.querySelectorAll('summary')].some(el => label.test((el.textContent || '').trim()))) return true;
+  return [...document.querySelectorAll('button')].some(el => (el.textContent || '').trim() === 'Create a Lightning Lesson');
+}"""
+LESSONS_LIST_JS = """() => {
+  const isLesson = a => {
+    try { return /\\/admin\\/lightning-lessons\\/[^/]+\\/?$/.test(new URL(a.href).pathname); }
+    catch (e) { return false; }
+  };
+  const label = /^(drafts|upcoming|past|[a-z ]+)\\s*\\(\\s*(\\d+)\\s*\\)$/i;
+  const card = a => {
+    let node = a;
+    while (node.parentElement) {
+      const parent = node.parentElement;
+      if ([...parent.querySelectorAll('a')].filter(isLesson).length > 1) break;
+      node = parent;
+    }
+    return {
+      href: a.href,
+      title: (a.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 200),
+      items: [...node.querySelectorAll('li')].map(li => (li.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 120))
+    };
+  };
+  const grouped = new Set();
+  const sections = [...document.querySelectorAll('details')].map(details => {
+    const summary = details.querySelector('summary');
+    const match = summary ? (summary.textContent || '').trim().match(label) : null;
+    if (!match) return null;
+    const anchors = [...details.querySelectorAll('a')].filter(isLesson);
+    anchors.forEach(a => grouped.add(a));
+    return {label: match[1].trim(), count: Number(match[2]), cards: anchors.map(card)};
+  }).filter(Boolean);
+  const ungrouped = [...document.querySelectorAll('a')].filter(a => isLesson(a) && !grouped.has(a)).length;
+  const next = [...document.querySelectorAll('a, button')].some(el => {
+    const name = (el.getAttribute('aria-label') || el.textContent || '').trim();
+    return /^(next|load more|show more)$/i.test(name) || el.getAttribute('rel') === 'next';
+  });
+  return {sections, ungrouped, next_control: next};
+}"""
+LESSON_ROUTE_READY_JS = """() => {
+  const path = location.pathname.replace(/\\/$/, '');
+  return /\\/edit$/.test(path) || new URLSearchParams(location.search).has('tab');
+}"""
+LESSON_PUBLISHED_JS = """() => {
+  const el = document.getElementById('__NEXT_DATA__');
+  if (!el) return null;
+  let data;
+  try { data = JSON.parse(el.textContent); } catch (e) { return null; }
+  const props = (data.props || {}).pageProps || {};
+  const w = props.adminPublishedWorkshop || props.initialWorkshop;
+  if (!w) return {published: false, slug: props.slug || null};
+  const page = w.page || {};
+  const event = page.school_event || {};
+  return {
+    published: true,
+    slug: page.slug || props.slug || null,
+    now: props.now || null,
+    start_datetime: event.start_datetime || null,
+    start_date: event.start_date || null,
+    start_time: event.start_time || null,
+    timezone: event.timezone || null,
+    duration_min: event.duration_min,
+    has_location: Boolean(event.location),
+    signup_count: w.signup_count,
+    recording_unique_viewer_count: w.recording_unique_viewer_count,
+    is_canceled: Boolean(w.is_canceled),
+    is_delisted: Boolean(w.is_delisted),
+    is_visible_on_discovery_page: Boolean(w.is_visible_on_discovery_page),
+    connected_course: w.connected_course_id !== null && w.connected_course_id !== undefined,
+    promo_code: w.connected_course_stripe_promo_code_id !== null && w.connected_course_stripe_promo_code_id !== undefined
+  };
+}"""
+LESSON_TEXT_COUNTS_JS = """() => {
+  const nodes = [...document.querySelectorAll('body *')].filter(el => (el.textContent || '').length < 200);
+  const pick = re => {
+    const hit = nodes.find(el => re.test((el.textContent || '').replace(/\\s+/g, ' ').trim()));
+    return hit ? (hit.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 120) : null;
+  };
+  return {
+    signups: pick(/^[\\d,]+\\s+signups?$/i),
+    viewers: pick(/^[\\d,]+\\s+watched the recording/i)
+  };
+}"""
+LESSON_SIGNUPS_READY_JS = """() => [...document.querySelectorAll('body *')].some(el =>
+  (el.textContent || '').length < 200 && /^[\\d,]+\\s+signups?$/i.test((el.textContent || '').replace(/\\s+/g, ' ').trim())
+)"""
+LESSON_EDITOR_READY_JS = """() => {
+  const details = document.getElementById('free-lesson-section-details');
+  if (!details || !details.querySelector('input[name="title"]')) return false;
+  if (!document.getElementById('free-lesson-section-instructors')) return false;
+  const start = [...details.querySelectorAll('h5, h4, label')].find(el => (el.textContent || '').trim() === 'Start time');
+  return Boolean(start && start.nextElementSibling && (start.nextElementSibling.textContent || '').trim());
+}"""
+LESSON_EDITOR_JS = """() => {
+  const norm = value => (value || '').replace(/\\s+/g, ' ').trim();
+  const counterNear = el => {
+    let node = el;
+    for (let i = 0; i < 5 && node; i += 1) {
+      const hit = [...node.querySelectorAll('p')].find(p => /^\\s*\\d+\\s*\\/\\s*\\d+\\s*$/.test(p.textContent || ''));
+      if (hit) return norm(hit.textContent);
+      node = node.parentElement;
+    }
+    return null;
+  };
+  const afterHeading = text => {
+    const heading = [...document.querySelectorAll('h5, h4, label')].find(el => norm(el.textContent) === text);
+    return heading ? heading.nextElementSibling : null;
+  };
+  const details = document.getElementById('free-lesson-section-details');
+  const titleInput = details ? details.querySelector('input[name="title"]') : null;
+  const dateBox = afterHeading('Date');
+  const dateInput = dateBox ? dateBox.querySelector('input') : null;
+  const selectText = text => {
+    const box = afterHeading(text);
+    return box ? norm(box.textContent) : null;
+  };
+  const buttons = details ? [...details.querySelectorAll('button')].map(el => norm(el.textContent)) : [];
+  const outcomeSection = document.getElementById('free-lesson-section-learningOutcomes');
+  const outcomes = outcomeSection ? [...outcomeSection.querySelectorAll('ol > li')].map(li => {
+    const title = li.querySelector('input[name$=".title"]');
+    const description = li.querySelector('textarea[name$=".description"]');
+    const flagged = li.querySelector('[data-error]');
+    return {
+      title: title ? title.value : null,
+      title_counter: title ? counterNear(title) : null,
+      description: description ? description.value : null,
+      description_counter: description ? counterNear(description) : null,
+      error: flagged ? flagged.getAttribute('data-error') === 'true' : false
+    };
+  }).filter(item => item.title !== null || item.description !== null) : [];
+  const topicSection = document.getElementById('free-lesson-section-topic');
+  const topic = topicSection ? topicSection.querySelector('textarea[name="topic_desc"]') : null;
+  const instructorSection = document.getElementById('free-lesson-section-instructors');
+  const instructors = instructorSection ? [...instructorSection.querySelectorAll('ol > li > button[data-error]')].map(button => ({
+    texts: [...button.querySelectorAll('div')].filter(el => el.children.length === 0).map(el => norm(el.textContent)).filter(Boolean),
+    error: button.getAttribute('data-error') === 'true'
+  })) : [];
+  const header = [...document.querySelectorAll('button')].map(el => norm(el.textContent))
+    .filter(text => /%\\s*complete/i.test(text) || /review\\s+\\d+\\s+errors?/i.test(text) || text === 'Publish');
+  const sections = [...document.querySelectorAll('[id^="free-lesson-section"]')];
+  const inline = [];
+  sections.forEach(section => {
+    section.querySelectorAll('p, span, div').forEach(el => {
+      if (el.children.length !== 0) return;
+      const cls = (el.getAttribute('class') || '');
+      const text = norm(el.textContent);
+      if (!text || text.length > 200) return;
+      if (/(^|\\s|-)(red|error|danger|destructive)(-|\\s|$)/i.test(cls) || /before publishing/i.test(text)) inline.push(text);
+    });
+  });
+  return {
+    title: {value: titleInput ? titleInput.value : null, counter: titleInput ? counterNear(titleInput) : null},
+    date: dateInput ? dateInput.value : null,
+    start_time: selectText('Start time'),
+    duration: selectText('Duration'),
+    timezone_text: details ? ((norm(details.textContent).match(/All times are in [A-Za-z_\\/]+/) || [null])[0]) : null,
+    link: {add_button: buttons.includes('Add event link'), update_button: buttons.includes('Update event link')},
+    outcomes,
+    topic: {value: topic ? topic.value : null, counter: topic ? counterNear(topic) : null},
+    instructors,
+    header,
+    inline_errors: inline
+  };
+}"""
+READ_ONLY_SCRIPTS = frozenset({
+    LESSONS_NAV_JS,
+    LESSONS_LIST_READY_JS,
+    LESSONS_LIST_JS,
+    LESSON_ROUTE_READY_JS,
+    LESSON_PUBLISHED_JS,
+    LESSON_TEXT_COUNTS_JS,
+    LESSON_SIGNUPS_READY_JS,
+    LESSON_EDITOR_READY_JS,
+    LESSON_EDITOR_JS,
+})
+SIGNUP_HISTOGRAM_UNAVAILABLE = (
+    "signup timestamps are not exposed read-only: the Signups tab shows only coarse relative "
+    "dates across paginated rows next to names and emails, and exact timestamps come only "
+    "from an undocumented API that this tool does not call"
+)
+
+
+class ReadOnlyPage:
+    """Page facade for lessons commands: navigation and registered read-only scripts only."""
+
+    def __init__(self, page):
+        self._page = page
+
+    @property
+    def url(self) -> str:
+        return self._page.url
+
+    def goto(self, url: str, **kwargs):
+        validate_url(url)
+        return self._page.goto(url, **kwargs)
+
+    def evaluate(self, script: str, *args):
+        if script not in READ_ONLY_SCRIPTS:
+            raise MavenError("lessons commands only run registered read-only scripts")
+        return self._page.evaluate(script, *args)
+
+    def wait_for_function(self, script: str, **kwargs):
+        if script not in READ_ONLY_SCRIPTS:
+            raise MavenError("lessons commands only run registered read-only scripts")
+        return self._page.wait_for_function(script, **kwargs)
+
+    def wait_for_timeout(self, timeout: float):
+        return self._page.wait_for_timeout(timeout)
+
+    def __getattr__(self, name: str):
+        raise MavenError(f"lessons commands are read-only; '{name}' is not available")
+
+
+def _lessons_base(page) -> tuple[str, ReadOnlyPage]:
+    dashboard = _dashboard_href(page)
+    reader = ReadOnlyPage(page)
+    _goto(reader, dashboard)
+    try:
+        reader.wait_for_function(LESSONS_NAV_JS, timeout=15000)
+        href = reader.evaluate(LESSONS_NAV_JS)
+    except MavenError:
+        raise
+    except Exception:
+        href = None
+    if not href:
+        raise MavenError("Lightning Lessons link was not found on the dashboard")
+    validate_url(href)
+    return lessons_admin_base(href), reader
+
+
+def _read_lesson_list(reader: ReadOnlyPage, base: str) -> tuple[list[dict], dict]:
+    _goto(reader, base)
+    _wait_for(reader, LESSONS_LIST_READY_JS, "Lightning Lessons list did not finish loading")
+    reader.wait_for_timeout(1000)
+    try:
+        state = reader.evaluate(LESSONS_LIST_JS)
+    except MavenError:
+        raise
+    except Exception:
+        raise MavenError("Lightning Lessons list could not be read") from None
+    return parse_lesson_list(state, base)
+
+
+def list_lessons(page) -> dict:
+    base, reader = _lessons_base(page)
+    lessons, completeness = _read_lesson_list(reader, base)
+    counts = {status: sum(1 for item in lessons if item["status"] == status)
+              for status in ("draft", "upcoming", "past")}
+    result = {
+        "command": "lessons list",
+        "source": "browser",
+        "lessons_url": base,
+        "lessons": lessons,
+        "count": len(lessons),
+        "counts": counts,
+        "completeness": completeness,
+        "observed_at": _now(),
+    }
+    assert_public_output(result)
+    return result
+
+
+def _resolve_lesson(page, lesson: str) -> tuple[str, str, ReadOnlyPage]:
+    base, lesson_id = parse_lesson_ref(lesson)
+    if base is None:
+        base, reader = _lessons_base(page)
+    else:
+        reader = ReadOnlyPage(page)
+    return base, lesson_id, reader
+
+
+def _open_lesson(reader: ReadOnlyPage, base: str, lesson_id: str) -> dict:
+    url = lesson_admin_url(base, lesson_id)
+    _goto(reader, url)
+    _wait_for(reader, LESSON_ROUTE_READY_JS, "lesson page did not finish loading")
+    path = urlsplit(reader.url).path.rstrip("/")
+    if f"/admin/lightning-lessons/{lesson_id}" not in path:
+        raise MavenError("lesson page redirected to a different lesson")
+    if path.endswith("/edit"):
+        return {"published": False}
+    try:
+        data = reader.evaluate(LESSON_PUBLISHED_JS)
+    except MavenError:
+        raise
+    except Exception:
+        raise MavenError("lesson overview data could not be read") from None
+    if data and data.get("slug") not in (None, lesson_id):
+        raise MavenError("lesson overview data belongs to a different lesson")
+    return data or {"published": False}
+
+
+def _read_text_counts(reader: ReadOnlyPage) -> dict:
+    reader.wait_for_timeout(1500)
+    try:
+        return reader.evaluate(LESSON_TEXT_COUNTS_JS) or {}
+    except MavenError:
+        raise
+    except Exception:
+        return {}
+
+
+def show_lesson(page, lesson: str) -> dict:
+    base, lesson_id, reader = _resolve_lesson(page, lesson)
+    published = summarize_published(_open_lesson(reader, base, lesson_id))
+    viewers_text = None
+    if published["published"]:
+        viewers_text = parse_recording_viewers(_read_text_counts(reader).get("viewers"))
+    _goto(reader, f"{lesson_admin_url(base, lesson_id)}/edit")
+    _wait_for(reader, LESSON_EDITOR_READY_JS, "lesson editor did not finish loading")
+    reader.wait_for_timeout(1000)
+    try:
+        state = reader.evaluate(LESSON_EDITOR_JS)
+    except MavenError:
+        raise
+    except Exception:
+        raise MavenError("lesson editor could not be read") from None
+    editor = summarize_editor(state)
+    status = "draft" if not published["published"] else (published.get("phase") or "published")
+    result = {
+        "command": "lessons show",
+        "source": "browser",
+        "lesson": {"id": lesson_id, "admin_url": lesson_admin_url(base, lesson_id), "status": status},
+        "editor": editor,
+        "published": published | ({"recording_viewer_text_count": viewers_text} if published["published"] else {}),
+        "observed_at": _now(),
+    }
+    assert_public_output(result)
+    return result
+
+
+def _stats_for(reader: ReadOnlyPage, base: str, lesson_id: str) -> dict:
+    published = summarize_published(_open_lesson(reader, base, lesson_id))
+    entry = {"id": lesson_id, "admin_url": lesson_admin_url(base, lesson_id)}
+    if not published["published"]:
+        return entry | {"status": "draft", "published": False}
+    viewers_text = parse_recording_viewers(_read_text_counts(reader).get("viewers"))
+    _goto(reader, f"{lesson_admin_url(base, lesson_id)}?tab=signups")
+    signups_tab = None
+    try:
+        reader.wait_for_function(LESSON_SIGNUPS_READY_JS, timeout=15000)
+        signups_tab = parse_signups_tab(_read_text_counts(reader).get("signups"))
+    except MavenError:
+        raise
+    except Exception:
+        signups_tab = None
+    return entry | {
+        "status": published.get("phase") or "published",
+        "published": True,
+        "start_date": published["start_date"],
+        "signups": {
+            "signup_count": published["signup_count"],
+            "signups_tab_count": signups_tab,
+        },
+        "recording_viewers": {
+            "recording_viewer_count": published["recording_viewer_count"],
+            "overview_text_count": viewers_text,
+        },
+        "live_attendance": None,
+        "signup_date_histogram": {"available": False, "reason": SIGNUP_HISTOGRAM_UNAVAILABLE},
+    }
+
+
+def lessons_stats(page, lesson: str | None, all_lessons: bool) -> dict:
+    if bool(lesson) == bool(all_lessons):
+        raise MavenError("choose exactly one of --lesson or --all")
+    completeness = {"status": "complete"}
+    if all_lessons:
+        base, reader = _lessons_base(page)
+        listed, completeness = _read_lesson_list(reader, base)
+        targets = [item["id"] for item in listed if item["status"] != "draft"]
+    else:
+        base, lesson_id, reader = _resolve_lesson(page, lesson)
+        targets = [lesson_id]
+    entries = [_stats_for(reader, base, lesson_id) for lesson_id in targets]
+    published = [item for item in entries if item.get("published")]
+    def total(group: str, key: str) -> int | None:
+        values = [item[group][key] for item in published]
+        if not values or any(value is None for value in values):
+            return None
+        return sum(values)
+    result = {
+        "command": "lessons stats",
+        "source": "browser",
+        "lessons": entries,
+        "count": len(entries),
+        "totals": {
+            "signup_count": total("signups", "signup_count"),
+            "recording_viewer_count": total("recording_viewers", "recording_viewer_count"),
+        },
+        "notes": [
+            "signup_count comes from the lesson page's embedded data; signups_tab_count is the "
+            "Signups tab header and may differ; neither is reconciled here",
+            "Maven admin shows no live-attendance count",
+        ],
+        "completeness": completeness,
+        "observed_at": _now(),
+    }
+    assert_public_output(result)
+    return result
