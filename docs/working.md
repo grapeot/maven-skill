@@ -7,9 +7,10 @@
 ## 2026-10-05（续）: 主 Skill 重构为任务路由 runbook
 
 ### 1. 今日完成工作
-- 把 `SKILL.md` 从「步骤 1 → 步骤 7」的线性管线改成「前置会话闸 + 任务路由表 + 各任务一个 reference」的 runbook，196 行降到约 90 行。由 Antigravity CLI（`gemini-3.8-flash-high`）起草，主线程审核。
-- 细节下沉：新增 `references/session.md`（会话命令语义、环境变量、`--auth-state` 隔离上下文、headless）与 `references/students_export.md`（导出命令、标签页生命周期、CSV 校验、收据）。
-- `references/lightning_lessons.md`、`references/promo_codes.md` 保持不变，改由路由表引用。
+- 把 `SKILL.md` 从「步骤 1 → 步骤 7」的线性管线改成「前置会话闸 + 任务路由表 + 各任务一个 reference」的 runbook，196 行降到约 95 行。由 Antigravity CLI（`gemini-3.8-flash-high`）起草，主线程审核。
+- 细节下沉：新增 `references/session.md`（会话命令语义、环境变量、`--auth-state` 隔离上下文、headless）、`references/students_export.md`（导出命令、标签页生命周期、CSV 校验、收据）、`references/courses_cohorts.md`（课程/班期发现契约、`latest` 三条选期路径）。
+- `references/promo_codes.md` 未改；`references/lightning_lessons.md` 仅更新根 Skill 交叉引用，并按 review 补齐 CLI 输出语义（partial、`completion_percent=null`、`live_attendance=null`、直方图不可用）与只读防护实现小节。
+- 按 review 修复：恢复快照失败后切 profile 的用户允许条件、恢复屏幕共享不得开可见窗口的硬约束、明确人工登录是业务前置、路由行标明折扣码写入例外。
 - 保留事实：会话连通是唯一串行前置闸；零 PII；绝对只读红线；折扣码写入边界。移除误导性的“点击写入”步骤编号。
 
 ### 2. 设计动机

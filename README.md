@@ -187,8 +187,9 @@ CLI 目前没有创建或管理 promo code 的命令，也不实现任何此类�
 | 参考文件 | 内容 |
 |---|---|
 | [`references/session.md`](skills/maven/references/session.md) | 会话命令语义、环境变量、`--auth-state` 隔离上下文、headless 运行 |
+| [`references/courses_cohorts.md`](skills/maven/references/courses_cohorts.md) | 课程/班期发现契约与 `latest` 选期规则 |
 | [`references/students_export.md`](skills/maven/references/students_export.md) | `students export` 的命令、标签页生命周期、CSV 校验与收据 |
-| [`references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) | Lightning Lesson 管理界面契约与坑点 |
+| [`references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) | Lightning Lesson 管理界面契约、CLI 输出语义与坑点 |
 | [`references/promo_codes.md`](skills/maven/references/promo_codes.md) | 折扣码区块与写入授权边界 |
 
 

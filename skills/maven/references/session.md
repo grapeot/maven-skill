@@ -76,14 +76,15 @@ maven-skill --auth-state .local/auth-state.json courses list
   - **实测 Maven 会清除传入新 context 的认证 cookie，即使刚执行 `session save`**。
   - 该选项属于**实验路径**，不保证跨 context 的可移植登录。
   - 遇到快照失效时，CLI 必须明确报告 snapshot 认证未通过；**严禁将 profile 验收冒充 snapshot 成功**，**严禁将匿名 context 的状态写回有效快照文件**。
-  - 常规任务默认使用持久 Profile（该路线已通过关闭 Chrome 重启后的登录复用验收）。若快照失败，应省略 `--auth-state` 回退到持久 Profile 路线继续。
+  - 常规任务默认使用持久 Profile（该路线已通过关闭 Chrome 重启后的登录复用验收）。**不要在快照失败后静默切换凭证来源**：先报告认证未通过；**仅在用户已明确允许持久 Profile 路线时**，说明该选择并省略 `--auth-state` 重试，否则停下请求用户确认。
 
 ---
 
 ## 5. 屏幕共享与 Headless 运行
 
 - 人工登录与常规使用默认开启可见 Chrome 窗口。
-- 在用户屏幕共享等敏感场景下，为了避免暴露浏览器可见窗口，可使用经用户授权的本地临时 wrapper 启动 headless Chrome（如注入 `--headless=new` 参数），并经由 `MAVEN_CHROME_EXECUTABLE` 指定。该 wrapper 复用同一持久 profile 和 CDP 端口。
+- **用户屏幕共享时，不得打开可见窗口。** 这是硬约束，不是可选优化：可见窗口会暴露浏览器中的私有内容。此场景下若尚未有可用会话，应先提示用户停止共享或择机登录，并改用下面授权的 headless 方式。
+- 在用户屏幕共享等敏感场景下，可使用经用户授权的本地临时 wrapper 启动 headless Chrome（如注入 `--headless=new` 参数），并经由 `MAVEN_CHROME_EXECUTABLE` 指定。该 wrapper 复用同一持久 profile 和 CDP 端口。
 - **不要永久修改 CLI 默认值**，保持公开 CLI 默认行为不变。
 
 ---

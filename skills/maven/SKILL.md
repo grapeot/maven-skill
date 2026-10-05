@@ -21,37 +21,40 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 
 ## 2. 前置：会话与登录（必须先做）
 
-任何业务操作前，必须且只需完成会话连通性检查这一项串行前置闸：
+任何业务操作前，必须完成登录与会话连通检查这一项串行前置闸：
 
-1. **人工登录（若尚未启动浏览器）**：由人类用户在终端执行命令唤起独立 Chrome 并完成登录：
+1. **人工登录是业务前置**：需要用户已登录 Maven（或持久 profile 中已有有效登录态）。若浏览器尚未启动，由人类用户在终端执行：
    ```bash
    maven-skill session open
    ```
-2. **连通性检查**：Agent 执行状态检查命令：
+   并在弹出的 Chrome 窗口中完成登录。**若浏览器已运行但未登录或登录失效，同样需要人工登录**；先读 [会话与登录配置参考](references/session.md)，尤其用户屏幕共享时不得打开可见窗口。
+2. **连通性检查**：Agent 执行：
    ```bash
    maven-skill session status
    ```
-   - **判定逻辑**：返回包含 `browser_connected: true` 时方可继续；若连接失败或超时，**停下来提示用户**：“未检测到活跃的 Maven 浏览器会话，请先执行 `maven-skill session open` 并在弹出的浏览器中完成登录。”
-   - **重要提示**：`status` 仅代表本地 CDP 调试端口可达，不代表 Maven 平台已完成登录，不可假定凭证有效。
+   - 返回包含 `browser_connected: true` 时方可继续；连接失败或超时则**停下来提示用户**：“未检测到活跃的 Maven 浏览器会话，请先执行 `maven-skill session open` 并在弹出的浏览器中完成登录。”
+   - **重要提示**：`status` 仅代表本地 CDP 调试端口可达，**不代表 Maven 已登录**。业务命令若报告未认证（跳转登录页、找不到账号菜单），停止并提示用户登录。
 
-环境变量、数据目录、端口、`--auth-state` 及 headless 运行等细节已全部下沉至 [会话与登录配置参考](references/session.md)。
+环境变量、数据目录、端口、`--auth-state` 与 headless 运行等细节见 [会话与登录配置参考](references/session.md)。
 
 ---
 
 ## 3. 任务路由（Runbook）
 
-会话连通后，各任务彼此独立，按需执行对应命令即可：
+会话连通后，各只读任务彼此独立，按需执行对应命令即可：
 
 | 任务 | 命令 | 先读的 reference |
 |---|---|---|
-| 查课程列表 | `maven-skill courses list` | 无 |
-| 查班期 / 确定 latest | `maven-skill cohorts list --course <COURSE_ADMIN_URL>` | 无 |
+| 查课程列表 | `maven-skill courses list` | [references/courses_cohorts.md](references/courses_cohorts.md) |
+| 查班期 / 确定 latest | `maven-skill cohorts list --course <COURSE_ADMIN_URL>` | [references/courses_cohorts.md](references/courses_cohorts.md) |
 | 导出 Enrolled 学员 CSV | `maven-skill students export --course <COURSE_ADMIN_URL> --cohort latest\|<COHORT_SLUG> [--output <PATH>]` | [references/students_export.md](references/students_export.md) |
-| 只读查看 Lightning Lesson | `maven-skill lessons list`<br>`maven-skill lessons show --lesson <ID_OR_URL>`<br>`maven-skill lessons stats --lesson <ID_OR_URL>\|--all` | [references/lightning_lessons.md](references/lightning_lessons.md) |
-| 核对 / 创建折扣码（promo code） | 无 CLI，浏览器操作 | [references/promo_codes.md](references/promo_codes.md) |
+| 只读查看 Lightning Lesson | `maven-skill lessons list`<br>`maven-skill lessons show --lesson <ID_OR_URL>`<br>`maven-skill lessons stats --all`（或 `--lesson <ID_OR_URL>`） | [references/lightning_lessons.md](references/lightning_lessons.md) |
+| 只读核对折扣码（promo code） | 无 CLI，浏览器只读观察 | [references/promo_codes.md](references/promo_codes.md) |
 | 会话与登录配置 | `maven-skill session open\|status\|save\|close` | [references/session.md](references/session.md) |
 
-命令细节见对应 reference；只有第 2 节的会话连通检查是串行前置，其余任务按需单独执行，不必按顺序走。
+命令细节见对应 reference；只有第 2 节的会话连通检查是串行前置，其余只读任务按需单独执行，不必按顺序走。
+
+**折扣码写入例外**：上表「只读核对折扣码」行仅覆盖只读观察。创建、暂停、删除折扣码是业务写入，CLI 不实现，默认由人类操作，Agent 仅在用户对**具体动作**单独显式授权后才可协助；参考文档与操作步骤本身不构成授权（详见 [references/promo_codes.md](references/promo_codes.md) 与第 5 节）。
 
 ---
 

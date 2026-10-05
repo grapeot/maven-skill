@@ -63,6 +63,23 @@
 - **报名时间**：Signups 标签页只显示 “a month ago” 一类相对时间，与姓名、邮箱同处分页表格；精确时间戳只能来自页面背后的未公开 API，本工具不调用。
 - **打开编辑器本身不触发自动保存**：多次只读打开同一已发布 lesson 的编辑器后，其内嵌数据中的 `updated_at` 未变化。
 
+### CLI 命令与输出语义
+
+`lessons list` / `lessons show` / `lessons stats` 只导航和读取。解读输出时须注意以下字段含义，不要把它们误读为「未完成」「零到场」或「数据待补」：
+
+- **`completeness.status=partial`**：列表页出现未知分组、游离卡片、分页控件，或分组声明数量与解析数量不一致时报告 partial。`partial` 不等于全量，不要据此断言 lesson 总数。
+- **`completion_percent` 与 `header_reports_complete`**：编辑器全部完成后，Maven 页头只剩 Preview 与 Publish，此时 `completion_percent=null` 且 `header_reports_complete=true`，表示信息完整而非未读取到完成度。
+- **`live_attendance` 恒为 `null`**：Maven 管理界面**没有**现场到场人数，这是「该指标不存在」，不是 0。
+- **`signup_date_histogram.available=false`**：报名精确时间戳只能来自未公开 API，工具不逆向私有接口，因此明确标记不可用并附原因；不要尝试补抓。Signups 标签页只有与姓名、邮箱同处的相对时间。
+- **两个报名数不调和**：内嵌数据 `signup_count` 与 Signups 标签页 `N signups` 可能不同，工具不做调和；回放观看数在内嵌数据与 overview 文字之间交叉核对。
+- **事件链接只输出布尔值 `event_link_set`**，从不输出链接本身；输出前统一扫描，含邮箱或会议链接时拒绝打印。
+
+### 只读防护实现
+
+- 所有 lesson 页面通过 `ReadOnlyPage` 门面访问：只有导航与登记的只读脚本，没有 click / fill / type / keyboard / locator 接口。
+- 点击守卫拒绝 Publish、Create a Lightning Lesson、Create a Zoom meeting、Delete instructor、Save 等标签及含写入动词的控件。
+- 工作标签页在 `finally` 中关闭，用户原有标签页保持原貌。
+
 ---
 
 ## 4. 安全边界
