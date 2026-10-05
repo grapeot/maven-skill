@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-10-05（续）: 主 Skill 重构为任务路由 runbook
+
+### 1. 今日完成工作
+- 把 `SKILL.md` 从「步骤 1 → 步骤 7」的线性管线改成「前置会话闸 + 任务路由表 + 各任务一个 reference」的 runbook，196 行降到约 90 行。由 Antigravity CLI（`gemini-3.8-flash-high`）起草，主线程审核。
+- 细节下沉：新增 `references/session.md`（会话命令语义、环境变量、`--auth-state` 隔离上下文、headless）与 `references/students_export.md`（导出命令、标签页生命周期、CSV 校验、收据）。
+- `references/lightning_lessons.md`、`references/promo_codes.md` 保持不变，改由路由表引用。
+- 保留事实：会话连通是唯一串行前置闸；零 PII；绝对只读红线；折扣码写入边界。移除误导性的“点击写入”步骤编号。
+
+### 2. 设计动机
+- 线性步骤诱导“按流程往下点”，此前已在 review 中造成“只读 skill 里出现点击写入步骤”的高严重度冲突。
+- 除会话连通外各任务彼此独立，任务来了通常是单点（导某班期名单、查某折扣码），不需要走完整管线。
+
+### 3. 本轮仅文档变更，CLI 行为与测试数量（138 项）不变。
+
+---
+
 ## 2026-10-05: Promo Code 管理界面文档
 
 ### 1. 今日完成工作

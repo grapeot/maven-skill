@@ -180,6 +180,18 @@ lessons 命令只导航和读取：所有 lesson 页面经只读门面访问，�
 
 CLI 目前没有创建或管理 promo code 的命令，也不实现任何此类写入。只读核对（导航到 Settings、读取 Promo codes 区块与表格）无需授权；创建、暂停、删除折扣码都属于业务写入，CLI 不实现，默认由人类操作，Agent 仅在用户对具体动作单独显式授权后才可协助。参考文档与操作步骤本身不构成授权。
 
+### 7. 主 Skill 结构与参考
+
+[`skills/maven/SKILL.md`](skills/maven/SKILL.md) 按 **runbook** 组织：一个「前置会话闸 + 任务路由表」的骨架，把每个任务的细节下沉到 `skills/maven/references/` 下。会话连通是唯一串行前置，其余任务按需单独执行，不必按顺序走。
+
+| 参考文件 | 内容 |
+|---|---|
+| [`references/session.md`](skills/maven/references/session.md) | 会话命令语义、环境变量、`--auth-state` 隔离上下文、headless 运行 |
+| [`references/students_export.md`](skills/maven/references/students_export.md) | `students export` 的命令、标签页生命周期、CSV 校验与收据 |
+| [`references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) | Lightning Lesson 管理界面契约与坑点 |
+| [`references/promo_codes.md`](skills/maven/references/promo_codes.md) | 折扣码区块与写入授权边界 |
+
+
 ---
 
 ## 安全与隐私规范

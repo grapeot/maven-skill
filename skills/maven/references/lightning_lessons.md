@@ -67,7 +67,7 @@
 
 ## 4. 安全边界
 
-- 以上均为观察记录；`maven-skill` CLI 保持只读，不实现任何编辑器写入。只读命令为 `lessons list`、`lessons show`、`lessons stats`（见 `SKILL.md` 步骤 5），它们不点击、不输入，事件链接只输出布尔值。
+- 以上均为观察记录；`maven-skill` CLI 保持只读，不实现任何编辑器写入。只读命令为 `lessons list`、`lessons show`、`lessons stats`（见 `SKILL.md` 任务路由表），它们不点击、不输入，事件链接只输出布尔值。
 - 编辑器中的任何写操作（**包括仅仅输入文字**，因为字段自动保存）都属于业务写入，必须先获得人类用户的单独显式授权。
 - Publish、Create a Zoom meeting、发送邮件始终是人类操作，Agent 不代为执行。折扣码（promo code）的创建/暂停/删除见 [Promo Code 管理界面参考](promo_codes.md)：CLI 不实现，默认由人类操作，Agent 仅在用户对具体动作单独显式授权后才可协助，本文件与操作步骤本身不构成授权。
 - 只读观察时也要避免点击 “Create a Lightning Lesson”“Delete instructor”“Add outcome” 等会立即产生写入的控件。
