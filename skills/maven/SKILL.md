@@ -38,6 +38,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 
 - **参考资料**：
   - [Lightning Lesson 管理界面参考](references/lightning_lessons.md)：导航路径、编辑器字段限制、自动保存与无确认写入等坑点，以及只读安全边界。涉及 Lightning Lesson 的任务先读此文件。
+  - [Promo Code 管理界面参考](references/promo_codes.md)：折扣码入口（课程 Settings）、常驻内联创建表单的字段与 `OR` 规则、已有码表格与 Actions 图标、写入授权边界。涉及折扣码的任务先读此文件。
 
 ---
 
@@ -114,7 +115,27 @@ maven-skill lessons stats --all
   - **不提供报名日期直方图**：Signups 标签页只在分页表格中、紧挨姓名与邮箱显示粗粒度相对时间（如 “a month ago”），精确时间戳只能来自未公开 API；按仓库规则不逆向私有接口，因此 `signup_date_histogram.available=false` 并附原因。
   - 所有 lesson 页面通过 `ReadOnlyPage` 访问：只有导航与登记过的只读脚本，没有 click / fill / type / keyboard / locator 接口；点击守卫拒绝 Publish、Create a Lightning Lesson、Create a Zoom meeting、Delete instructor、Save 等标签及含写入动词的控件。工作标签页在 `finally` 中关闭。
 
-### 步骤 6: 隔离上下文模式（可选）
+### 步骤 6: Promo Code（折扣码）参考
+
+先读 [Promo Code 管理界面参考](references/promo_codes.md)。折扣码属于课程、对全部班期生效，入口在课程 Settings 页：
+
+```
+https://maven.com/<org>/admin/courses/<course-slug>/settings
+```
+
+**只读核对**（无需授权即可做，也是 Agent 的默认动作）：在独立工作标签页中导航到上述 Settings 页（不要在用户当前标签页上用 `page goto`，开页后 `finally` 关闭），读取 Payments 组内 `Promo codes` 区块的说明文字与表格，核对某个码是否存在、Amount off / Percent off 额度与 Redemptions 是否与预期一致。CLI 目前没有专门的 promo code 命令；`page snapshot` 可作只读观察的兜底，但页面文本可能含真实推广码，只留在本地。
+
+**创建折扣码（业务写入，默认由人类操作，Agent 仅在人类对具体动作单独显式授权后才可协助）**：同一 Settings 页的 `Promo codes` 区块内有一个**常驻内联表单**，无需先点开关。字段与提交控件：
+
+- `Code`（`input[name="code"]`）：唯一代码，虚拟示例如 `FRIENDS50`。
+- `Amount off`（`input[name="amount_off"]`）或 `Percent off`（`input[name="percent_off"]`）：**二选一**，另一个留空。HTML 层中间以 `OR` 分隔但不会阻止同时填写，须自行只填其一。金额/百分比的**输入**字符串格式未实测，不要臆造 `$` 前缀是否被接受；表格**显示**格式才是 `$100` / `25%`。
+- 提交按钮：精确文本 `Create promo code`；区块标题是 `Create a promo code`，不要点错。
+
+提交后到表格核对新行：Code、额度正确，Redemptions 空值显示为 `-`（新建行初值未实测，不要假定是 `0`）。
+
+约束与坑点：代码是课程级且可跨班期复用；不支持 100% off 的码（学生无法用它免费报名，应改为手动免费导入，手动导入同样属业务写入）；点击 `Create promo code` 预期会创建折扣码，是否有二次确认、是否立即对学生可见**均未实测**，不要当成已知的「无确认、立即生效」来操作。页面改版频繁，字段名与按钮文本可能变化，执行前以实际 DOM 为准，并同步修订参考文档。
+
+### 步骤 7: 隔离上下文模式（可选）
 如需通过既有认证状态快照在独立上下文中执行：
 ```bash
 maven-skill --auth-state .local/auth-state.json courses list
@@ -157,6 +178,7 @@ maven-skill --auth-state .local/auth-state.json courses list
   - 严禁修改课程大纲、价格、班期排期或学生状态。
   - 严禁自动向学生发送邀请邮件、私信或系统通知。
   - 严禁调用任何形式的外部资金转账、分润结算或 Ledger 写入接口。
+  - 创建、暂停或删除折扣码（promo code）都是业务写入，CLI 不实现；默认由人类操作，Agent 仅可在用户对**具体动作**给予单独显式授权后协助。参考文档与操作步骤本身不构成授权。
   - **任何业务写入操作必须先停下，向人类用户陈述意图并获得独立显式授权**。
 - **隐私保护**：
   - 严禁在长久公共文档、公开日志或交互回复中打印真实学员信息。
