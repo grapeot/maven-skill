@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-10-05: Promo Code 管理界面文档
+
+### 1. 今日完成工作
+- 新增 `skills/maven/references/promo_codes.md`，并在 `SKILL.md`（新增步骤 6）与 `README.md`（第 6 节）链接。
+- 内容为对课程 Settings 页 Payments 组内 Promo codes 区块的人工观察：入口路径、常驻内联创建表单字段（`code` / `amount_off` / `percent_off` 与 `OR` 规则）、提交按钮文本、已有码表格列与 Actions 图标、写入授权边界，并交叉引用 Maven 帮助中心《Discount code strategies》的规则（课程级、可暂停/删除、不支持 100% off、分成基于实付价）。
+- 本轮仅文档变更，CLI 行为与测试数量（138 项）不变。
+
+### 2. 观察到的坑点
+1. 创建表单是常驻内联 `<form>` 而非弹窗，只要课程已接 Stripe 并设价即可见。
+2. 区块标题 `Create a promo code` 与提交按钮 `Create promo code` 文本相近，定位易混淆。
+3. `code` / `amount_off` / `percent_off` 在 DOM 上均无 `required`，浏览器不会阻止空提交；错误文案与校验位置未测。
+4. Actions 列三个图标按钮无文字、无 `aria-label`、无 `title`，真实 hover 无 tooltip；中间枚 SVG 路径在多行间不稳定，无法按名称或路径区分复制链接 / 暂停 / 删除。
+5. `Direct payment link` 区块是班期 join 链接（`/<cohort>/join?seats=1`），不含 promo 参数，不能用来拼折扣分享链接。
+
+### 3. 未验证假设（刻意未点击写入）
+- 点击 `Create promo code` 后是否有二次确认、新码是否立即对学生可见，均未点击验证；本文档不把「无确认、立即生效」当已知事实写进公开文档。
+- 金额/百分比输入框接受的字符串格式未测；只有表格**显示**格式（`$100` / `25%`）经实测。
+- 新建行的 Redemptions 初值未测；已知空值显示为 `-`，未见 `0`。
+
+### 4. 写入边界
+- 本轮未执行任何写入：仅导航与读取，未填字段、未点提交按钮。探测脚本全程只读，工作标签页在 `finally` 中关闭。
+- 文档明确：创建、暂停、删除折扣码属业务写入，CLI 不实现，默认由人类操作，Agent 仅在人类对具体动作单独显式授权后可协助；参考文档与操作步骤本身不构成授权。
+
+---
+
 ## 2026-10-03（续）: Lightning Lesson 只读命令
 
 ### 1. 完成工作
