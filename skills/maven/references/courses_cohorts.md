@@ -23,7 +23,7 @@ maven-skill cohorts list --course <COURSE_ADMIN_URL>
 ```
 
 - **解析**：进入课程概览页，解析观察到的班期卡片，输出 slug、状态、开始日期与页面日期文字。
-- **slug 交叉核验**：每张卡片同时读取 Student home 链接与 settings 链接（`?cohort=<slug>`），二者必须指向同一个 slug；不一致即拒绝，不猜测。
+- **slug 交叉核验**：每张卡片同时读取 Student home 链接与 settings 链接（`?cohort=<slug>`）；只要二者都给出了 slug，就必须指向同一个，不一致即拒绝，不猜测。至少需要其中一个来源存在，二者都缺失时该卡片无效。
 - **完整性**：出现分页控件时报告 `completeness.status=partial`，`pages_visited=1`。
 - **导出联动**：班期列表为 `partial` 时，`students export --cohort latest` 拒绝推断 latest；此时应先观察并明确指定实际 slug。
 

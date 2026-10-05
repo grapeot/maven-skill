@@ -18,7 +18,7 @@ maven-skill students export --course <COURSE_ADMIN_URL> --cohort <COHORT_SLUG> [
 
 参数说明：
 - `--course <COURSE_ADMIN_URL>`：课程管理页面 URL。
-- `--cohort latest|<COHORT_SLUG>`：班期标识。设为 `latest` 时，CLI 自动选择唯一的 Upcoming 班期（遇到 partial 班期列表时拒绝推断 latest）；亦可明确传入班期 slug。
+- `--cohort latest|<COHORT_SLUG>`：班期标识。`latest` 的选择逻辑不止「唯一 Upcoming」，完整规则见 [课程与班期发现参考](courses_cohorts.md)（优先唯一 Upcoming；多个 Upcoming 按完整年份日期选最新；无 Upcoming 时从非 `self_paced` 的带日期班期选最新；缺年或并列拒绝；班期列表 `partial` 时拒绝推断 `latest`）。亦可明确传入班期 slug。
 - `--output <PATH>`：（可选）指定导出 CSV 文件的存储路径。省略时保存至默认数据目录。
 
 ---
