@@ -19,7 +19,7 @@
 source .venv/bin/activate
 pytest
 ```
-当前套件共包含 **138 项自动化测试**（含参数化用例），全部保持通过。
+当前套件共包含 **201 项自动化测试**（含参数化用例），全部保持通过。
 
 ### 2.1 会话管理与 CDP 安全测试 (`tests/test_session.py`)
 - **导航 URL 安全过滤**：限制仅允许 `maven.com` 域名下的 HTTPS 链接，阻断非 Maven 域、HTTP 协议以及携带账号密码凭据的 URL。
@@ -64,6 +64,15 @@ pytest
 - **命令编排**：用记录调用的假页面跑 `list` / `show` / `stats`，断言零点击零输入；管理页 URL 跳过组织发现；内嵌数据属于其他 lesson 时拒绝；草稿 stats 报告未发布。
 - **生命周期与 CLI**：命令失败时工作标签页仍关闭；`stats` 必须且只能指定 `--lesson` 或 `--all`；意外异常输出经脱敏，不含 token、邮箱或路径。
 
+### 2.5 课程评价只读命令测试 (`tests/test_reviews.py`)
+- **URL 规范化**：公开落地页与课程管理页（含子路径与查询串）都换算为公开落地页；拒绝非 HTTPS、非 maven.com、保留路径段与多级路径。
+- **卡片解析**：手写虚拟卡片文本叶子，验证姓名、班期标签、头衔、日期、全文的定位；缺头衔或标签、多段落、缺日期或正文；正文与头衔中的邮箱被替换。
+- **评分**：星标三态（实心/半星/空心）换算；内嵌 0–10 分优先、星标兜底；课程总评分换算与页面文字交叉核对。
+- **合并与完整性**：重复卡片去重；条数不足、无法解析的卡片、未声明总数时报告 partial；匿名评价丢弃姓名与头衔；testimonial 去 HTML。
+- **问卷卡片与 CSV**：班期卡片解析（已完成/待发送/无回复/self-paced），跳过 Course interest survey 与含邮箱的卡片；CSV 只返回聚合，拒绝 HTML、行数不符、缺评分列、非数字与越界评分、非 UTF-8。
+- **命令编排**：假页面驱动 `Show more reviews` 分页，断言只点击该按钮；单页不点击；重定向报错；点击守卫拒绝写入标签；`reviews surveys` 不加 `--download` 时零点击零文件，加 `--download` 时只点击目标班期按钮、文件 `0600`、写 `survey-export-*` 收据、stdout 无姓名邮箱与留言；无效下载被删除；静态检查新增脚本不含写入模式且内嵌读取不取 `user_id` 与头像。
+- **CLI**：参数解析；`--output-dir` 必须配合 `--download`。
+
 ---
 
 ## 3. 实机验证状态清单 (Empirical Verification Status)
@@ -76,4 +85,5 @@ pytest
 | **`--auth-state` 独立上下文实机验证** | 在同一 Chrome 中建立新 context，载入快照并认证 | 认证失败 | 新鲜 cookie 已发送但被服务端清除；不能静默回退 profile 或覆盖有效快照 |
 | **跨 Chrome 重启登录态保持** | 关闭后重启同一 profile，验证是否保留登录 | 通过 | 临时 headless Chrome 中登录保持，业务查询正常 |
 | **Lightning Lesson 只读命令** | `lessons list`、草稿与已结束 lesson 的 `lessons show`、`lessons stats --lesson` 与 `--all` | 已实测通过 | 列表完整性 complete；字段、计数器、链接布尔值、发布错误与聚合统计正确；输出无邮箱与会议链接；运行前后浏览器标签页集合一致，未修改任何 lesson |
+| **课程评价只读命令** | `reviews list` 公开落地页全量分页、`reviews surveys` 聚合与 `--download` 全部班期 | 已实测通过 | 公开评价逐页加载至抽屉无 `Show more`，条数等于内嵌总数，半星/空心星识别正确；问卷各班期均值与页面一致，CSV 行数与按钮回复数一致、文件 `0600` 且留在私有目录；公开评价总数等于各班期 CSV 公开评价数之和，评分总数等于问卷回复总数 |
 | **独立 agent headless 导出** | 动态发现课程、选择 latest、导出并与首份 CSV 比较 | 通过 | 行数、全列值、规范化邮箱/时间集合一致，输出与 receipt 私有；仅验证 profile 路线 |

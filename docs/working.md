@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-06: 课程评价只读命令 `reviews list` / `reviews surveys`
+
+### 变更
+- 新增 `reviews list --course <公开落地页或课程管理页 URL>`：读取公开落地页的学员评价（点击 `Show more reviews` 打开抽屉并逐页加载）与讲师精选 testimonial，输出显示名、头衔、班期标签、日期、0–5 评分、全文、课程总评分与完整性。
+- 新增 `reviews surveys --course <COURSE_ADMIN_URL> [--download [--cohort] [--output-dir]]`：从课程 Surveys 页读取各班期 post-course survey 平均分与回复数；`--download` 时经页面自带按钮把问卷 CSV 存到私有目录并写收据，stdout 只输出聚合。
+- `_write_receipt` 增加 `prefix` / `pointer` 参数，问卷收据为 `survey-export-*.json` 且不更新 `latest.json`（`students export` 下游依赖该指针）。
+- 新增 `references/reviews.md`，SKILL 路由表、README、AGENTS、`docs/test.md` 同步；测试 138 → 201 项。
+
+### 实测观察（已写入 reference）
+1. 内嵌 `courseReviews` 只含第一页 6 条，`metadata.total` 是文字评价数；`ratingSummary` 的评分数更大，因为只打分不写评价的学员也计入。
+2. 评分存储为 0–10，显示为 5 星；页面文字四舍五入（如 4.96 显示为 5.0），总评分以内嵌 sum/count 为准。
+3. 第一次 `Show more reviews` 打开右侧抽屉，抽屉内另有 `Show more reviews` 每次追加一页；抽屉中的卡片是全集。
+4. 星标三态颜色 class 相同：半星是另一条 `fill-rule=evenodd` 路径，空心星是标准路径 `fill=#FFFFFF`。最初按颜色判断时把半星和空心星都算成实心（所有评价都成了 5 分），改为按路径属性判断后与问卷分布一致。
+5. Surveys 页卡片用 `textContent` 读会把字段粘连（`Cohort NCompleted <date>…`），改用 `innerText`。
+6. 问卷的 `N responses` 按钮直接触发 CSV 下载，不经对话框；不同班期问卷的列集合不完全相同，按列名模式定位评分、公开评价、私下留言列。
+7. 交叉核对成立：公开评价条数 = 各班期 CSV「公开评价」非空数之和；公开评分数 = 问卷回复总数。
+
+### 验证
+- [x] `reviews list` 实机：全量分页至无 `Show more`，`completeness=complete`，半星/空心星正确。
+- [x] `reviews surveys` 实机：聚合与页面一致；`--download` 全部班期，CSV 行数校验通过、文件 `0600`、只在私有目录。
+- [x] 离线测试 201 项与 `scripts/privacy_review.py` 通过。
+
+---
+
 ## 2026-10-05（续）: 折扣码两条硬规则提到 SKILL 路由层
 
 ### 变更

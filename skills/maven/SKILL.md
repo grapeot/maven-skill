@@ -1,11 +1,11 @@
 ---
 name: maven
-description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports, and read Lightning Lesson drafts and aggregate stats without writing.
+description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports, read Lightning Lesson drafts and aggregate stats, and read course reviews (public landing-page reviews and per-cohort post-course survey ratings) without writing.
 ---
 
 # Maven Agent Skill
 
-本技能是面向 Maven（maven.com）平台的只读工具，采用「浏览器优先、人工登录、Agent 观察」架构，通过 Chrome DevTools Protocol (CDP) 连接已登录的 Chrome 实例，执行课程与班期观察、Lightning Lesson 查看及已校验的报名学员名单导出。
+本技能是面向 Maven（maven.com）平台的只读工具，采用「浏览器优先、人工登录、Agent 观察」架构，通过 Chrome DevTools Protocol (CDP) 连接已登录的 Chrome 实例，执行课程与班期观察、Lightning Lesson 查看、课程评价读取及已校验的报名学员名单导出。
 
 > **阶段状态说明**：默认持久 profile 路线已验证（支持课程发现、最新班期选择、CSV 导出及重启与临时 headless 运行）。`--auth-state` 隔离逻辑属于实验路径，离线测试通过但在实机新 context 中认证恢复失败，不保证可移植登录。
 
@@ -49,6 +49,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 | 查班期 / 确定 latest | `maven-skill cohorts list --course <COURSE_ADMIN_URL>` | [references/courses_cohorts.md](references/courses_cohorts.md) |
 | 导出 Enrolled 学员 CSV | `maven-skill students export --course <COURSE_ADMIN_URL> --cohort latest\|<COHORT_SLUG> [--output <PATH>]` | [references/students_export.md](references/students_export.md) |
 | 只读查看 Lightning Lesson | `maven-skill lessons list`<br>`maven-skill lessons show --lesson <ID_OR_URL>`<br>`maven-skill lessons stats --all`（或 `--lesson <ID_OR_URL>`） | [references/lightning_lessons.md](references/lightning_lessons.md) |
+| 读课程评价（公开评价 / 班期问卷评分） | `maven-skill reviews list --course <PUBLIC_COURSE_URL\|COURSE_ADMIN_URL>`<br>`maven-skill reviews surveys --course <COURSE_ADMIN_URL> [--download [--cohort <LABEL\|N>] [--output-dir <DIR>]]` | [references/reviews.md](references/reviews.md) |
 | 只读核对折扣码（promo code） | 无 CLI，浏览器只读观察 | [references/promo_codes.md](references/promo_codes.md) |
 | 会话与登录配置 | `maven-skill session open\|status\|save\|close` | [references/session.md](references/session.md) |
 
@@ -68,7 +69,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 1. **当前会话状态**：说明 CDP 端口与浏览器连接情况。
 2. **业务操作摘要**：列出操作的课程 URL 及班期 slug；Lightning Lesson 任务列出 lesson ID、状态与发布阻断项。
 3. **统计数据与产物指标**：报告 Enrolled 学员人数、CSV 文件相对路径、文件大小及 SHA-256 校验和。
-4. **零 PII 原则**：CLI stdout 与回复中**严禁打印任何学员的真实姓名或邮箱地址**。
+4. **零 PII 原则**：CLI stdout 与回复中**严禁打印任何学员的真实姓名或邮箱地址**。唯一例外是 `reviews list`：它原样输出公开落地页上已经展示的评价者显示名与头衔；问卷 CSV 中的姓名、邮箱与私下留言仍只留在私有目录。
 
 ---
 
@@ -83,6 +84,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
   - 任何业务写入操作必须先停下，向人类用户陈述意图并获得独立显式授权。
 - **只读交互约束**：
   - `lessons` 系列命令只导航和读取，不点击任何可写控件，不输入任何文字；事件链接只输出布尔值。
+  - `reviews` 系列命令不回复、不发布、不隐藏任何评价，只点击 `Show more reviews` 与（`--download` 时）班期问卷的 `N responses` 下载按钮。
 - **隐私与脱敏保护**：
   - 严禁在公开文档、日志或交互回复中打印真实学员信息；所有公开文档与测试一律用虚拟示例（fake examples）。
   - 遇到异常时输出脱敏的错误信息，杜绝暴露 Cookie 或敏感凭据。

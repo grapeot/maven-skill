@@ -11,6 +11,8 @@ from maven_skill.ops import (
     list_cohorts,
     list_courses,
     list_lessons,
+    list_reviews,
+    list_surveys,
     run_business,
     show_lesson,
 )
@@ -45,6 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
     stats = lessons.add_parser("stats").add_mutually_exclusive_group(required=True)
     stats.add_argument("--lesson")
     stats.add_argument("--all", action="store_true", dest="all_lessons")
+    reviews = groups.add_parser("reviews").add_subparsers(dest="action", required=True)
+    reviews.add_parser("list").add_argument("--course", required=True)
+    surveys = reviews.add_parser("surveys")
+    surveys.add_argument("--course", required=True)
+    surveys.add_argument("--cohort")
+    surveys.add_argument("--download", action="store_true")
+    surveys.add_argument("--output-dir", type=Path)
     return parser
 
 
@@ -93,6 +102,20 @@ def main(argv: list[str] | None = None) -> int:
                 session,
                 args.auth_state,
                 lambda page: lessons_stats(page, args.lesson, args.all_lessons),
+            )
+        elif args.group == "reviews" and args.action == "list":
+            result = run_business(
+                session, args.auth_state, lambda page: list_reviews(page, args.course)
+            )
+        elif args.group == "reviews":
+            if args.output_dir is not None and not args.download:
+                raise MavenError("--output-dir requires --download")
+            result = run_business(
+                session,
+                args.auth_state,
+                lambda page: list_surveys(
+                    page, args.course, args.cohort, args.download, args.output_dir, session.root
+                ),
             )
         else:
             result = run_business(
