@@ -23,8 +23,8 @@
 | 元素 | 定位 | 说明 |
 |---|---|---|
 | Code | `input[name="code"]` | 折扣码文本。**只允许字母、数字和连字符 `-`**（实测：含下划线 `_` 会被拒，错误文案 `Promo code can only contain letters, numbers, and hyphens`）。无 `maxlength`、无 `placeholder`、无 `required` 属性；唯一性由页面/服务端校验 |
-| Amount off | `input[name="amount_off"]` | 固定金额减免。输入框是空 `text`。**实测输入不带 `$` 的整数金额即可**（如 `200` 表示 $200）；表格**显示**格式为 `$` 前缀 + 千分位逗号（如 `$100`）。与 Percent off 二选一 |
-| Percent off | `input[name="percent_off"]` | 百分比减免。输入框同样是空 `text`；**实测输入不带 `%` 的数字**（如 `30` 表示 30%）。表格**显示**格式为 `N%`。与 Amount off 二选一 |
+| Amount off | `input[name="amount_off"]` | 固定金额减免。输入框是空 `text`。**实测输入不带 `$` 的整数即可**；表格**显示**格式为 `$` 前缀 + 千分位逗号（虚构示例 `$100`）。与 Percent off 二选一 |
+| Percent off | `input[name="percent_off"]` | 百分比减免。输入框同样是空 `text`；**实测输入不带 `%` 的数字**即可；表格**显示**格式为 `N%`（虚构示例 `25%`）。与 Amount off 二选一 |
 | 提交 | `button`，文本 `Create promo code` | 在表单内，`type=button`（由 JS 处理提交），当前未禁用。不是区块标题 `Create a promo code` |
 
 创建规则（来自 Maven 帮助中心《Discount code strategies》，是文章结论，不是本页点击实测）：先接入 Stripe 并设好价格，否则 Settings 不显示创建入口；金额减免或百分比减免**二选一**；不支持 100% off 的折扣码（学生无法用它免费报名，应改为手动免费导入学员，手动导入同样属于业务写入）；折扣码是课程级、可删除或暂停（pause）。
@@ -46,11 +46,11 @@
 ## 4. 行为与坑点
 
 1. **创建入口始终可见**：只要课程已接入 Stripe 并设好价格，Promo codes 区块与创建表单就常驻 Settings 页，无需先点某个开关。
-2. **Code 只接受字母、数字、连字符**：实测含下划线的代码（如 `demo_50`）会被客户端校验拒绝，内联提示 `Promo code can only contain letters, numbers, and hyphens`，**且不发出任何请求**——表单看起来只是「点了没反应」。用连字符替代下划线（`demo-50`）即可通过。输入前先确认代码只由 `[A-Za-z0-9-]` 组成。
-3. **创建是纯客户端提交，失败时静默**：点击 `Create promo code` 时若校验不通过，不会弹对话框、也不一定有 toast；错误以内联文字出现在 Code 字段附近。判断是否成功**不能只看点击后是否有弹窗**，必须到表格核对新行、并刷新页面复验。
-4. **填写受控输入框**：两个金额字段是 React 受控输入。用 `fill()` 或逐字符输入后必须触发 `input` / `change` 事件，React 才会把值写入组件状态；否则点击提交时组件内仍是空值。实测用原生 setter + 派发 `input` 事件最稳。
-5. **新建行 Redemptions 初值是 `-`**，不是 `0`；`Amount off` 显示为 `$` 前缀（`200` → `$200`）。
-6. **这是创建按钮，未授权不要点**：点击 `Create promo code` 会真实创建折扣码。实测**没有二次确认对话框**，创建成功后立即出现在表格中（刷新后仍在）。仍属业务写入，必须先获人类对具体动作的单独授权。
+2. **Code 只接受字母、数字、连字符**：含下划线的代码会被客户端校验拒绝，内联提示 `Promo code can only contain letters, numbers, and hyphens`，**且不发出任何请求**——表单看起来只是「点了没反应」。输入前先确认代码只由 `[A-Za-z0-9-]` 组成。这是已实测的一种具体拒绝形态，不代表所有「点击无效」都是这个原因。
+3. **校验不通过时不一定有弹窗**：已观察到校验失败只以内联文字出现在 Code 字段附近，无对话框、无可辨识的 toast。因此**不能靠「有没有弹窗」判断成败**；判断成败必须回到表格核对新行并刷新复验（见下方流程）。
+4. **金额字段是受控输入**：`code` / `amount_off` / `percent_off` 都由 React 组件状态驱动。正常 `fill()` 或逐字符输入通常会带上 `input` 事件并被 React 接收；但若脚本填完后点击无效、组件状态仍为空，可用原生 setter（`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set`）+ 派发 `input` / `change` 事件强制写入。先确认 DOM `value` 与组件状态一致再提交。
+5. **新建行 Redemptions 初值是 `-`**，不是 `0`；`Amount off` 显示为 `$` 前缀（填整数 `100` 显示 `$100`）。
+6. **这是创建按钮，未授权不要点**：点击 `Create promo code` 会真实创建折扣码。已实测**没有二次确认对话框**，创建成功后随即出现在表格中（刷新后仍在）。仍属业务写入，必须先获人类对具体动作的单独授权。
 7. **两个「Create」文本要区分**：区块标题是 `Create a promo code`，提交按钮是 `Create promo code`。定位提交按钮时应按精确文本匹配，避免误点到标题。
 8. **金额与百分比的互斥是业务规则**：HTML 层不阻止同时填写两个字段，但语义上只能用一个；创建时应只填其一并把另一个留空。
 9. **分享链接不在表格文字里**：Maven 帮助中心说创建后用 link 图标复制分享链接，截图里的形态是落地页加 `?promoCode=` 一类参数。页面上的 `Direct payment link` 区块是**班期 join 链接**（形态 `/<cohort-id>/join?seats=1`），查询参数里没有 promo，不能拿来拼折扣链接。`Marketing` 区另有一个文本为 `Create share link`、字段为 `email` 的控件，与折扣分享链接无关，不要点。
@@ -60,12 +60,12 @@
 
 1. 打开课程 Settings 页（带 `?cohort=<id>` 亦可，Promo 表不随班期变）。
 2. 等到 `input[name="code"]` 出现。
-3. 用原生 setter 写入 `code`（只含 `[A-Za-z0-9-]`）与 `amount_off`（纯数字，不带 `$`）或 `percent_off`（纯数字，不带 `%`），各派发 `input` 与 `change` 事件；另一个留空。
+3. 写入 `code`（只含 `[A-Za-z0-9-]`）与 `amount_off`（纯数字，不带 `$`）或 `percent_off`（纯数字，不带 `%`），另一个留空；确认 DOM `value` 与组件状态一致。
 4. 点击精确文本为 `Create promo code` 的按钮。
-5. **验收**：到表格查找该 Code，确认 `Amount off`/`Percent off` 正确、`Redemptions` 为 `-`；再 `reload` 页面复验该行仍在（行数 +1），才算成功。
-6. 失败排查：若点击后无请求、表格无新行，检查 Code 是否含下划线/特殊字符，并检查代码附近的红色内联提示。
+5. **验收**：到表格查找该 Code，确认额度与预期一致；再 `reload` 页面复验该行仍在。新建行的 `Redemptions` 显示为 `-`。表格行数会随创建增加，但不要把它当作唯一判据。
+6. 失败排查：若点击后表格无新行，检查 Code 是否含下划线/特殊字符，并读取 Code 字段附近的内联提示。
 
-> 实测中「先按含下划线的代码提交（被内联校验拒绝、无请求）、再按连字符版本提交」时，`amount_off=200` 提交后表格显示 `$200`、`Redemptions=-`，刷新后仍在。真实代码名不进本文档。
+> 已实测：先提交一个含下划线的代码被内联校验拒绝（无网络请求），换成连字符版本后创建成功；表格出现新行、`reload` 后仍在。本文档不记录真实代码名与真实额度。
 
 ---
 
