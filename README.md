@@ -170,11 +170,27 @@ CLI 统一入口为 `maven-skill`，执行结果均输出标准 JSON。
 
 lessons 命令只导航和读取：所有 lesson 页面经只读门面访问，没有点击或输入接口，Publish、Create a Zoom meeting、Delete instructor、Save 等控件被点击守卫拒绝。stdout 输出前统一扫描，含邮箱或会议链接时拒绝打印。
 
-### 5. Lightning Lesson 参考
+### 5. 课程评价只读命令 (`reviews`)
+
+- **公开评价**：
+  ```bash
+  maven-skill reviews list --course https://maven.com/<school>/<course>
+  ```
+  读取课程公开落地页上的全部学员评价（点击 `Show more reviews` 打开抽屉并逐页加载）与讲师精选 testimonial。每条评价输出页面显示名、头衔·公司、班期标签、日期、0–5 评分（首页来自内嵌数据，其余来自星标图标，支持半星）与全文；另输出课程总评分（内嵌数据 0–10 分制换算，并与页面 `X.X (N ratings)` 交叉核对）与完整性。也接受课程管理页 URL。
+
+- **班期问卷评分**：
+  ```bash
+  maven-skill reviews surveys --course <COURSE_ADMIN_URL> [--download [--cohort <LABEL|N>] [--output-dir <DIR>]]
+  ```
+  从课程 Surveys 页读取各班期 post-course survey 的平均分、回复数与完成日期。加 `--download` 时通过页面自带的 `N responses` 按钮把各班期问卷 CSV 保存到私有目录（`0600`、拒绝覆盖、带收据，不改动 `students export` 的 `latest.json` 指针），stdout 只输出评分直方图、公开评价/私下留言人数等聚合。
+
+两个命令都不回复、不发布、不隐藏评价。`reviews list` 输出的是公开页面已展示的内容（含评价者显示名）；问卷 CSV 中的姓名、邮箱与私下留言只留在本地。详见 [`skills/maven/references/reviews.md`](skills/maven/references/reviews.md)。
+
+### 6. Lightning Lesson 参考
 
 [`skills/maven/references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) 记录了 Lightning Lesson 管理界面的导航路径、编辑器字段限制（标题 ≤ 60、outcome 描述 ≤ 120、`topic_desc` ≤ 450 等）与行为坑点（字段自动保存、创建与删除讲师无确认、事件链接是硬性发布阻断项）。CLI 只提供上面的只读 `lessons` 命令，不实现任何编辑器写入；Publish、创建 Zoom 会议、邮件与课程级折扣码写入默认由人类操作。
 
-### 6. Promo Code（折扣码）参考
+### 7. Promo Code（折扣码）参考
 
 [`skills/maven/references/promo_codes.md`](skills/maven/references/promo_codes.md) 记录了课程 Settings 页 Payments 组内 Promo codes 区块的结构：常驻内联创建表单（`input[name="code"]`、`amount_off` 与 `percent_off` 二选一的 `OR` 规则、提交按钮 `Create promo code`）、已有码表格（Code / Amount off / Percent off / Redemptions / Actions）与相关坑点。折扣码属于课程、对全部班期生效，可删除或暂停，不支持 100% off。
 
@@ -182,7 +198,7 @@ lessons 命令只导航和读取：所有 lesson 页面经只读门面访问，�
 
 CLI 目前没有创建或管理 promo code 的命令，也不实现任何此类写入。只读核对（导航到 Settings、读取 Promo codes 区块与表格）无需授权；创建、暂停、删除折扣码都属于业务写入，CLI 不实现，默认由人类操作，Agent 仅在用户对具体动作单独显式授权后才可协助。参考文档与操作步骤本身不构成授权。
 
-### 7. 主 Skill 结构与参考
+### 8. 主 Skill 结构与参考
 
 [`skills/maven/SKILL.md`](skills/maven/SKILL.md) 按 **runbook** 组织：一个「前置会话闸 + 任务路由表」的骨架，把每个任务的细节下沉到 `skills/maven/references/` 下。会话连通是唯一串行前置，其余任务按需单独执行，不必按顺序走。
 
@@ -192,6 +208,7 @@ CLI 目前没有创建或管理 promo code 的命令，也不实现任何此类�
 | [`references/courses_cohorts.md`](skills/maven/references/courses_cohorts.md) | 课程/班期发现契约与 `latest` 选期规则 |
 | [`references/students_export.md`](skills/maven/references/students_export.md) | `students export` 的命令、标签页生命周期、CSV 校验与收据 |
 | [`references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) | Lightning Lesson 管理界面契约、CLI 输出语义与坑点 |
+| [`references/reviews.md`](skills/maven/references/reviews.md) | 公开评价与班期问卷评分的读取契约、评分换算与隐私边界 |
 | [`references/promo_codes.md`](skills/maven/references/promo_codes.md) | 折扣码区块与写入授权边界 |
 
 
@@ -205,8 +222,8 @@ CLI 目前没有创建或管理 promo code 的命令，也不实现任何此类�
    - 导出 CSV、认证快照文件及收据文件权限为 `0600`；
    - 导出的 CSV 文件若已存在，拒绝覆盖已有文件。
 3. **敏感文件全量忽略**：`.local/` 目录、下载文件、运行日志及 `.env` 均加入 `.gitignore`，严禁提交到代码仓库。
-4. **只读业务边界**：本工具仅用于只读观察、名单导出与 Lightning Lesson 只读查看。严禁修改课程或学生数据，严禁发送邀请，严禁调用任何外部结算或记账写入接口。
-5. **脱敏与脱密**：业务命令 stdout 绝不打印学员姓名与邮箱。公共仓库中仅使用虚拟示例。
+4. **只读业务边界**：本工具仅用于只读观察、名单导出、Lightning Lesson 只读查看与课程评价读取。严禁修改课程或学生数据，严禁发送邀请，严禁调用任何外部结算或记账写入接口。
+5. **脱敏与脱密**：业务命令 stdout 绝不打印学员姓名与邮箱（`reviews list` 仅输出公开页面已展示的评价者显示名）。公共仓库中仅使用虚拟示例。
 
 ---
 

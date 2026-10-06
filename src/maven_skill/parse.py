@@ -719,3 +719,372 @@ def assert_public_output(value) -> None:
     elif isinstance(value, str):
         if any(pattern.search(value) for pattern in PRIVATE_OUTPUT):
             raise MavenError("lesson output contained private data; refusing to print")
+
+
+# --- Course reviews (read-only) ----------------------------------------------------
+
+PUBLIC_COURSE_PATH = re.compile(r"^/(?P<school>[A-Za-z0-9_-]{1,64})/(?P<course>[A-Za-z0-9_-]{1,64})/?$")
+ADMIN_COURSE_PATH = re.compile(
+    r"^/(?P<school>[A-Za-z0-9_-]{1,64})/admin/courses/(?P<course>[A-Za-z0-9_-]{1,64})(?:/.*)?$"
+)
+RESERVED_SCHOOL_SEGMENTS = frozenset({"admin", "courses", "login", "signup", "u", "e", "en", "api"})
+REVIEW_DATE = re.compile(
+    r"^(?P<month>Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|"
+    r"Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(?P<day>\d{1,2}),\s*(?P<year>20\d{2})$",
+    re.IGNORECASE,
+)
+RATING_SUMMARY = re.compile(r"(?P<avg>\d(?:\.\d+)?)\s*\(\s*(?P<count>[\d,]+)\s+ratings?\s*\)", re.IGNORECASE)
+SURVEY_RESPONSES = re.compile(r"^(?:(?P<count>[\d,]+)\s+responses?|No responses yet)$", re.IGNORECASE)
+SURVEY_RATING = re.compile(r"(?P<value>\d(?:\.\d+)?)\s*/\s*5\b")
+SURVEY_COMPLETED = re.compile(r"\bCompleted\s+(?P<date>[A-Za-z]{3,9}\.?\s+\d{1,2},\s*20\d{2})", re.IGNORECASE)
+SURVEY_RATING_COLUMN = re.compile(r"\brate\b|\brating\b", re.IGNORECASE)
+SURVEY_PUBLIC_COLUMN = re.compile(r"public review", re.IGNORECASE)
+SURVEY_PRIVATE_COLUMN = re.compile(r"private note", re.IGNORECASE)
+
+
+def public_course_url(value: str) -> str:
+    """Normalize a public course URL (or a course admin URL) to the public landing page."""
+    parsed = urlsplit((value or "").strip())
+    if parsed.scheme != "https" or parsed.hostname != "maven.com":
+        raise MavenError("course must be a https://maven.com course URL")
+    admin = ADMIN_COURSE_PATH.match(parsed.path)
+    if admin:
+        return f"https://maven.com/{admin.group('school')}/{admin.group('course')}"
+    match = PUBLIC_COURSE_PATH.match(parsed.path)
+    if not match or match.group("school").casefold() in RESERVED_SCHOOL_SEGMENTS:
+        raise MavenError("course must be a public Maven course URL such as https://maven.com/<school>/<course>")
+    return f"https://maven.com/{match.group('school')}/{match.group('course')}"
+
+
+def review_text(value: str | None) -> str:
+    """Keep the full review text, normalize whitespace per paragraph, redact emails."""
+    paragraphs = []
+    for block in re.split(r"\n\s*\n", (value or "").replace("\r", "")):
+        line = " ".join(block.split())
+        if line:
+            paragraphs.append(line)
+    return EMAIL.sub("[email removed]", "\n\n".join(paragraphs))
+
+
+def strip_html(value: str | None) -> str:
+    text = re.sub(r"<\s*br\s*/?>", "\n", value or "", flags=re.IGNORECASE)
+    text = re.sub(r"</\s*p\s*>", "\n\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    for entity, char in (("&nbsp;", " "), ("&amp;", "&"), ("&lt;", "<"), ("&gt;", ">"), ("&quot;", '"'), ("&#39;", "'")):
+        text = text.replace(entity, char)
+    return review_text(text)
+
+
+def parse_review_date(text: str | None) -> str | None:
+    match = REVIEW_DATE.match(" ".join((text or "").split()))
+    if not match:
+        return None
+    month = MONTHS[match.group("month")[:3].lower()]
+    return f"{int(match.group('year')):04d}-{month:02d}-{int(match.group('day')):02d}"
+
+
+def _review_key(name: str | None, text: str) -> tuple[str, str]:
+    norm = re.sub(r"\W+", "", (text or "").casefold())[:80]
+    return ((name or "").casefold().strip(), norm)
+
+
+def parse_review_card(card: dict) -> dict | None:
+    """Turn the ordered text leaves of one rendered review card into fields.
+
+    Observed order: name (p), cohort chips (span), headline "Title · Company" (div),
+    date (p), then the review text (div). Headline and chips may be missing.
+    """
+    leaves = [
+        {"tag": (leaf.get("tag") or "").lower(), "text": (leaf.get("text") or "").strip()}
+        for leaf in card.get("leaves") or []
+        if (leaf.get("text") or "").strip()
+    ]
+    date_index = next((i for i, leaf in enumerate(leaves) if parse_review_date(leaf["text"])), None)
+    if date_index is None:
+        return None
+    head = leaves[:date_index]
+    body = leaves[date_index + 1:]
+    name_leaf = next((leaf for leaf in head if leaf["tag"] == "p"), None)
+    chips = [" ".join(leaf["text"].split()) for leaf in head if leaf["tag"] == "span"]
+    headline = None
+    for leaf in head:
+        if leaf is name_leaf or leaf["tag"] == "span":
+            continue
+        headline = " ".join(leaf["text"].split())
+    text = review_text("\n\n".join(leaf["text"] for leaf in body))
+    if not text:
+        return None
+    cohort = max(chips, key=len) if chips else None
+    stars = star_rating(card.get("stars"))
+    name = " ".join(name_leaf["text"].split()) if name_leaf else None
+    return {
+        "name": EMAIL.sub("[email removed]", name) if name else None,
+        "headline": EMAIL.sub("[email removed]", headline) if headline else None,
+        "cohort": cohort,
+        "date": parse_review_date(leaves[date_index]["text"]),
+        "date_text": " ".join(leaves[date_index]["text"].split()),
+        "text": text,
+        "star_icons": stars,
+    }
+
+
+def star_rating(states: list[str] | None) -> float | None:
+    """Rating from the five rendered star icons: full = 1, half = 0.5, empty = 0."""
+    values = {"full": 1.0, "half": 0.5, "empty": 0.0}
+    if not states or len(states) != 5 or any(state not in values for state in states):
+        return None
+    return sum(values[state] for state in states)
+
+
+def _embedded_review(item: dict) -> dict | None:
+    text = review_text(item.get("review"))
+    if not text:
+        return None
+    anonymous = bool(item.get("anonymous"))
+    rating = item.get("rating")
+    rating = rating if isinstance(rating, (int, float)) and not isinstance(rating, bool) else None
+    created = item.get("created_at") if isinstance(item.get("created_at"), str) else None
+    title = None if anonymous else (item.get("job_title") or None)
+    company = None if anonymous else (item.get("company") or None)
+    headline = " · ".join(part for part in (title, company) if part) or None
+    return {
+        "name": None if anonymous else (item.get("name") or None),
+        "anonymous": anonymous,
+        "headline": headline,
+        "cohort_name": item.get("cohort_name") or None,
+        "cohort_type": item.get("cohort_type") or None,
+        "cohort_start": (item.get("cohort_start") or "")[:10] or None,
+        "created_at": created,
+        "rating_raw": rating,
+        "text": text,
+    }
+
+
+def merge_public_reviews(embedded: dict | None, cards: list[dict] | None) -> tuple[list[dict], dict]:
+    """Merge rendered review cards with the page's embedded first page of reviews.
+
+    Rendered cards are the authority for what the page shows (all pages after
+    "Show more reviews"); embedded data adds numeric ratings and ISO dates for the
+    reviews it contains. Maven stores ratings on a 0-10 scale and renders 5 stars.
+    """
+    embedded = embedded or {}
+    by_key: dict[tuple[str, str], dict] = {}
+    for item in embedded.get("items") or []:
+        parsed = _embedded_review(item)
+        if parsed:
+            by_key.setdefault(_review_key(parsed["name"], parsed["text"]), parsed)
+    reviews: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    unparsed = 0
+    for card in cards or []:
+        parsed = parse_review_card(card)
+        if parsed is None:
+            unparsed += 1
+            continue
+        key = _review_key(parsed["name"], parsed["text"])
+        if key in seen:
+            continue
+        seen.add(key)
+        reviews.append(_review_entry(parsed, by_key.get(key)))
+    if not cards:
+        for key, item in by_key.items():
+            if key not in seen:
+                seen.add(key)
+                reviews.append(_review_entry(None, item))
+    metadata = embedded.get("metadata") or {}
+    total = metadata.get("total") if isinstance(metadata.get("total"), int) else None
+    complete = unparsed == 0 and total is not None and len(reviews) >= total
+    return reviews, {
+        "status": "complete" if complete else "partial",
+        "declared_total": total,
+        "parsed": len(reviews),
+        "unparsed_cards": unparsed,
+    }
+
+
+def _review_entry(card: dict | None, embedded: dict | None) -> dict:
+    card = card or {}
+    embedded = embedded or {}
+    if embedded.get("rating_raw") is not None:
+        rating = round(embedded["rating_raw"] / 2, 2)
+        rating_source = "embedded_data"
+    elif card.get("star_icons") is not None:
+        rating = card["star_icons"]
+        rating_source = "star_icons"
+    else:
+        rating = None
+        rating_source = None
+    anonymous = embedded.get("anonymous", False)
+    name = None if anonymous else (card.get("name") or embedded.get("name"))
+    return {
+        "source": "public_review",
+        "name": name,
+        "anonymous": bool(anonymous) or (name or "").casefold() == "anonymous",
+        "headline": None if anonymous else (card.get("headline") or embedded.get("headline")),
+        "cohort": card.get("cohort") or embedded.get("cohort_name"),
+        "cohort_name": embedded.get("cohort_name"),
+        "date": card.get("date") or (embedded.get("created_at") or "")[:10] or None,
+        "rating": rating,
+        "rating_scale": 5,
+        "rating_source": rating_source,
+        "text": card.get("text") or embedded.get("text"),
+    }
+
+
+def parse_testimonials(items: list[dict] | None) -> list[dict]:
+    """Instructor-curated landing-page testimonials (no rating, no date)."""
+    testimonials = []
+    for item in items or []:
+        text = strip_html(item.get("quote"))
+        if not text:
+            continue
+        name = " ".join((item.get("author_name") or "").split()) or None
+        headline = " ".join((item.get("author_description") or "").split()) or None
+        testimonials.append({
+            "source": "public_testimonial",
+            "name": EMAIL.sub("[email removed]", name) if name else None,
+            "headline": EMAIL.sub("[email removed]", headline) if headline else None,
+            "text": text,
+        })
+    return testimonials
+
+
+def rating_summary(embedded: dict | None, summary_text: str | None) -> dict:
+    """Course-level rating: embedded sum/count (0-10 scale) cross-checked with the page text."""
+    data = (embedded or {}).get("rating_summary") or {}
+    total, count = data.get("sum"), data.get("count")
+    average = None
+    if isinstance(total, (int, float)) and isinstance(count, int) and count > 0:
+        average = round(total / count / 2, 3)
+    shown_average = shown_count = None
+    match = RATING_SUMMARY.search(" ".join((summary_text or "").split()))
+    if match:
+        shown_average = float(match.group("avg"))
+        shown_count = int(match.group("count").replace(",", ""))
+    return {
+        "average": average,
+        "scale": 5,
+        "ratings_count": count if isinstance(count, int) else shown_count,
+        "page_text_average": shown_average,
+        "page_text_count": shown_count,
+        "counts_agree": None if count is None or shown_count is None else count == shown_count,
+    }
+
+
+def parse_survey_card(card: dict) -> dict | None:
+    """Parse one post-course survey cohort card on the course Surveys page."""
+    text = " ".join((card.get("text") or "").split())
+    button = " ".join((card.get("button") or "").split())
+    responses_match = SURVEY_RESPONSES.match(button)
+    if not responses_match or not text or EMAIL.search(text):
+        return None
+    if "course interest survey" in text.casefold():
+        return None
+    responses = int(responses_match.group("count").replace(",", "")) if responses_match.group("count") else 0
+    label_end = len(text)
+    for marker in (" Completed ", " Reminder ", " Share", " In progress", " Starts "):
+        index = text.find(marker)
+        if 0 < index < label_end:
+            label_end = index
+    label = text[:label_end].strip()
+    completed = SURVEY_COMPLETED.search(text)
+    rating = SURVEY_RATING.search(text)
+    return {
+        "label": label[:120],
+        "status": "completed" if completed else "pending",
+        "completed_date": parse_review_date(completed.group("date")) if completed else None,
+        "average_rating": float(rating.group("value")) if rating else None,
+        "rating_scale": 5,
+        "responses": responses,
+        "downloadable": responses > 0 and not card.get("disabled"),
+    }
+
+
+def parse_course_survey_average(text: str | None) -> dict | None:
+    match = re.search(
+        r"Average rating for\s+(\d+)\s+cohorts?\s+(\d(?:\.\d+)?)\s*/\s*5", " ".join((text or "").split()), re.IGNORECASE
+    )
+    if not match:
+        return None
+    return {"cohorts": int(match.group(1)), "average_rating": float(match.group(2)), "scale": 5}
+
+
+def survey_label_token(label: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9]+", "-", label or "").strip("-").lower()[:48]
+    return token or "cohort"
+
+
+def validate_survey_csv(payload: bytes, expected_rows: int) -> dict:
+    """Validate a post-course survey export and return aggregate-only facts."""
+    sample = payload[:2000].lstrip()
+    lowered = sample[:500].lower()
+    if sample.startswith(b"<") or b"<html" in lowered or b"<!doctype" in lowered:
+        raise MavenError("download was HTML, not a CSV; session may have expired")
+    try:
+        text = payload.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise MavenError("survey export is not UTF-8 text") from None
+    reader = csv.DictReader(io.StringIO(text))
+    columns = list(reader.fieldnames or [])
+    if not columns or len(columns) != len(set(columns)) or any(name in (None, "") for name in columns):
+        raise MavenError("survey CSV header is malformed")
+    rating_columns = [name for name in columns if SURVEY_RATING_COLUMN.search(name)]
+    if len(rating_columns) != 1:
+        raise MavenError("survey CSV does not have exactly one rating column")
+    rating_column = rating_columns[0]
+    public_column = next((name for name in columns if SURVEY_PUBLIC_COLUMN.search(name)), None)
+    private_column = next((name for name in columns if SURVEY_PRIVATE_COLUMN.search(name)), None)
+    rows = list(reader)
+    ratings = []
+    histogram: dict[str, int] = {}
+    for row in rows:
+        if None in row or any(value is None for value in row.values()):
+            raise MavenError("survey CSV header is malformed")
+        raw = (row.get(rating_column) or "").strip()
+        if not raw:
+            continue
+        try:
+            value = float(raw)
+        except ValueError:
+            raise MavenError("survey CSV rating is not numeric") from None
+        if not 0 <= value <= 5:
+            raise MavenError("survey CSV rating is outside the 0-5 scale")
+        ratings.append(value)
+        key = f"{value:g}"
+        histogram[key] = histogram.get(key, 0) + 1
+    if len(rows) != expected_rows:
+        raise MavenError("survey CSV row count does not match the page response count")
+    def filled(column: str | None) -> int | None:
+        if column is None:
+            return None
+        return sum(1 for row in rows if (row.get(column) or "").strip())
+    return {
+        "columns": columns,
+        "rating_column": rating_column,
+        "counts": {
+            "page_responses": expected_rows,
+            "csv_rows": len(rows),
+            "ratings": len(ratings),
+            "public_reviews": filled(public_column),
+            "private_notes": filled(private_column),
+        },
+        "rating": {
+            "average": round(sum(ratings) / len(ratings), 3) if ratings else None,
+            "scale": 5,
+            "histogram": dict(sorted(histogram.items(), key=lambda kv: float(kv[0]), reverse=True)),
+        },
+    }
+
+
+def assert_review_output(value) -> None:
+    """Public review output may name reviewers as Maven shows them, never emails or meeting links."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            assert_review_output(key)
+            assert_review_output(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            assert_review_output(item)
+    elif isinstance(value, str):
+        if any(pattern.search(value) for pattern in PRIVATE_OUTPUT):
+            raise MavenError("review output contained private data; refusing to print")

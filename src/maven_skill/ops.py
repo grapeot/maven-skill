@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import stat
 import time
@@ -14,12 +15,22 @@ from maven_skill.parse import (
     assert_click_allowed,
     assert_public_output,
     assert_unique_slugs,
+    canonical_url,
     choose_cohort,
     choose_students_nav,
     course_admin_path,
     dedupe_courses,
+    assert_review_output,
     lesson_admin_url,
     lessons_admin_base,
+    merge_public_reviews,
+    parse_course_survey_average,
+    parse_survey_card,
+    parse_testimonials,
+    public_course_url,
+    rating_summary,
+    survey_label_token,
+    validate_survey_csv,
     parse_cohort_card,
     parse_lesson_list,
     parse_lesson_ref,
@@ -549,19 +560,24 @@ def _default_output(data_dir: Path, slug: str) -> Path:
     return data_dir / "downloads" / f"students-{safe_slug_token(slug)}-{stamp}.csv"
 
 
-def _write_receipt(data_dir: Path, payload: dict) -> Path:
+def _write_receipt(
+    data_dir: Path, payload: dict, prefix: str = "students-export", pointer: bool = True
+) -> Path:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     directory = data_dir / "receipts"
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     directory.chmod(0o700)
-    path = directory / f"students-export-{stamp}.json"
+    path = directory / f"{prefix}-{stamp}.json"
     if path.exists():
         raise MavenError("export receipt already exists; refusing to overwrite")
     private_json(path, payload)
     path.chmod(0o600)
-    pointer = directory / "latest.json"
-    private_json(pointer, payload | {"receipt": str(path.resolve())})
-    pointer.chmod(0o600)
+    if not pointer:
+        return path
+    # latest.json is the students-export pointer that downstream consumers read.
+    latest = directory / "latest.json"
+    private_json(latest, payload | {"receipt": str(path.resolve())})
+    latest.chmod(0o600)
     return path
 
 
@@ -991,6 +1007,412 @@ def lessons_stats(page, lesson: str | None, all_lessons: bool) -> dict:
             "Maven admin shows no live-attendance count",
         ],
         "completeness": completeness,
+        "observed_at": _now(),
+    }
+    assert_public_output(result)
+    return result
+
+
+# --- Course reviews (read-only) ----------------------------------------------------
+#
+# reviews list reads the public course landing page: the page's embedded first page of
+# reviews and testimonials, then the rendered review cards after the read-only
+# "Show more reviews" controls. reviews surveys reads the course admin Surveys page
+# (per-cohort post-course survey ratings) and, on request, downloads each cohort's
+# survey CSV through the page's own "N responses" control into the private data
+# directory. Neither command types anything; every click passes the shared guard.
+
+MAX_REVIEW_PAGES = 40
+REVIEWS_READY_JS = """() => Boolean(document.getElementById('__NEXT_DATA__'))"""
+REVIEWS_EMBEDDED_JS = """() => {
+  const el = document.getElementById('__NEXT_DATA__');
+  if (!el) return null;
+  let data;
+  try { data = JSON.parse(el.textContent); } catch (e) { return null; }
+  const props = (data.props || {}).pageProps || {};
+  const reviews = props.courseReviews || null;
+  const summary = props.ratingSummary || null;
+  const course = props.course || {};
+  const content = (((props.landingPage || {}).profile || {}).content) || {};
+  const testimonials = content.testimonials || {};
+  const meta = reviews && reviews.metadata ? reviews.metadata : {};
+  return {
+    course: {slug: course.slug || null, name: course.name || null},
+    rating_summary: summary ? {sum: summary.sum_ratings, count: summary.num_ratings} : null,
+    metadata: {total: meta.total, pages: meta.pages, page: meta.page},
+    items: reviews && Array.isArray(reviews.items) ? reviews.items.map(item => {
+      const user = item.user || {};
+      const bio = ((user.attrs || {}).bio) || {};
+      const cohort = item.cohort || {};
+      const anonymous = Boolean(item.is_anonymous);
+      return {
+        anonymous,
+        name: anonymous ? null : (user.preferred_name || null),
+        job_title: anonymous ? null : (bio.job_title || null),
+        company: anonymous ? null : (bio.company || null),
+        rating: item.rating,
+        review: item.review || '',
+        cohort_name: cohort.name || null,
+        cohort_type: cohort.cohort_type || null,
+        cohort_start: cohort.start_date || null,
+        created_at: item.created_at || null
+      };
+    }) : [],
+    testimonials: testimonials.is_visible === false || !Array.isArray(testimonials.items) ? [] :
+      testimonials.items.map(item => ({
+        author_name: item.author_name || null,
+        author_description: item.author_description || null,
+        quote: item.quote || ''
+      }))
+  };
+}"""
+REVIEW_CARDS_JS = """(scope) => {
+  const norm = value => (value || '').replace(/\\s+/g, ' ').trim();
+  const containers = scope === 'dialog' ? [...document.querySelectorAll('[role="dialog"]')] : [document.body];
+  let heading = null;
+  let container = null;
+  for (const candidate of containers) {
+    heading = [...candidate.querySelectorAll('h2, h3, h5')].find(el => norm(el.textContent) === 'Alumni reviews');
+    if (heading) { container = candidate; break; }
+  }
+  if (!heading) return null;
+  const isStars = el => el.children.length >= 1 && el.children.length <= 10 &&
+    [...el.children].every(child => child.tagName.toLowerCase() === 'svg') && !el.closest('button');
+  const starsIn = node => [...node.querySelectorAll('div')].filter(isStars);
+  let root = heading.parentElement;
+  while (root && starsIn(root).length === 0) root = root.parentElement;
+  if (!root) return {cards: [], show_more: false, summary_text: null};
+  const isHeading = el => ['h2', 'h3', 'h5'].includes(el.tagName.toLowerCase()) && norm(el.textContent) === 'Alumni reviews';
+  const cards = starsIn(root).map(group => {
+    let node = group;
+    while (node.parentElement && node.parentElement !== root) {
+      const parent = node.parentElement;
+      if (starsIn(parent).length > 1 || [...parent.querySelectorAll('h2, h3, h5')].some(isHeading)) break;
+      node = parent;
+    }
+    const leaves = [];
+    node.querySelectorAll('p, span, div').forEach(el => {
+      if (el.closest('button')) return;
+      const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('\\n').trim();
+      if (own) leaves.push({tag: el.tagName.toLowerCase(), text: own.slice(0, 5000)});
+    });
+    const starState = svg => {
+      const path = svg.querySelector('path');
+      if (!path) return 'unknown';
+      if ((path.getAttribute('fill-rule') || '') === 'evenodd') return 'half';
+      const fill = (path.getAttribute('fill') || '').toLowerCase();
+      if (['#fff', '#ffffff', 'white', 'none', 'transparent'].includes(fill)) return 'empty';
+      const parts = (getComputedStyle(svg).color || '').match(/\\d+/g);
+      if (parts && parts.length >= 3) {
+        const [r, g, b] = parts.slice(0, 3).map(Number);
+        if (Math.max(r, g, b) - Math.min(r, g, b) <= 40) return 'empty';
+      }
+      return 'full';
+    };
+    return {leaves, stars: [...group.children].map(starState)};
+  });
+  const more = [...container.querySelectorAll('button')].some(el => norm(el.textContent) === 'Show more reviews');
+  const summary = [...document.querySelectorAll('button')].map(el => norm(el.textContent))
+    .find(text => /\\(\\s*[\\d,]+\\s+ratings?\\s*\\)/i.test(text));
+  return {cards, show_more: more, summary_text: summary || null};
+}"""
+SURVEYS_NAV_JS = """() => [...document.querySelectorAll('a')].filter(el => {
+  try {
+    return (el.textContent || '').trim() === 'Surveys' &&
+      /\\/admin\\/courses\\/[^/]+\\/surveys\\/?$/.test(new URL(el.href).pathname);
+  } catch (e) { return false; }
+}).map(el => el.href)"""
+SURVEYS_NAV_READY_JS = f"() => ({SURVEYS_NAV_JS})().length > 0"
+SURVEY_BUTTON_RE = r"^(\d[\d,]*\s+responses?|No responses yet)$"
+SURVEY_BUTTON_JS_RE = json.dumps(SURVEY_BUTTON_RE)
+SURVEY_CARDS_JS = """() => {
+  const norm = value => (value || '').replace(/\\s+/g, ' ').trim();
+  const pattern = new RegExp(""" + SURVEY_BUTTON_JS_RE + """, 'i');
+  const buttons = [...document.querySelectorAll('button')].filter(el => pattern.test(norm(el.textContent)));
+  const cards = buttons.map((button, index) => {
+    let node = button;
+    while (node.parentElement) {
+      const parent = node.parentElement;
+      if ([...parent.querySelectorAll('button')].filter(el => pattern.test(norm(el.textContent))).length > 1) break;
+      node = parent;
+    }
+    return {index, button: norm(button.textContent), disabled: Boolean(button.disabled), text: norm(node.innerText || node.textContent).slice(0, 300)};
+  });
+  const body = document.body.innerText || '';
+  const at = body.indexOf('Average rating for');
+  return {cards, average_text: at >= 0 ? body.slice(at, at + 80) : null};
+}"""
+SURVEY_PAGE_READY_JS = """() => {
+  const pattern = new RegExp(""" + SURVEY_BUTTON_JS_RE + """, 'i');
+  return [...document.querySelectorAll('button')].some(el => pattern.test((el.textContent || '').replace(/\\s+/g, ' ').trim()));
+}"""
+SURVEY_CARD_TEXT_JS = """(button) => {
+  const norm = value => (value || '').replace(/\\s+/g, ' ').trim();
+  const pattern = new RegExp(""" + SURVEY_BUTTON_JS_RE + """, 'i');
+  let node = button;
+  while (node.parentElement) {
+    const parent = node.parentElement;
+    if ([...parent.querySelectorAll('button')].filter(el => pattern.test(norm(el.textContent))).length > 1) break;
+    node = parent;
+  }
+  return norm(node.innerText || node.textContent).slice(0, 300);
+}"""
+
+
+def _guarded_click(locator) -> None:
+    try:
+        name = " ".join(
+            f"{locator.inner_text(timeout=5000)} {locator.get_attribute('aria-label') or ''}".split()
+        )
+    except Exception:
+        raise MavenError("control label could not be read; refusing to click") from None
+    assert_click_allowed(name)
+    try:
+        locator.click(timeout=10000)
+    except Exception:
+        raise MavenError("read-only control could not be clicked") from None
+
+
+def _review_cards(page, scope: str) -> dict | None:
+    try:
+        return page.evaluate(REVIEW_CARDS_JS, scope)
+    except Exception:
+        raise MavenError("review cards could not be read") from None
+
+
+def _wait_more_cards(page, before: int) -> dict | None:
+    started = time.monotonic()
+    state = None
+    while time.monotonic() - started < 15:
+        page.wait_for_timeout(500)
+        state = _review_cards(page, "dialog")
+        if state and len(state["cards"]) > before:
+            page.wait_for_timeout(500)
+            return _review_cards(page, "dialog")
+    return state
+
+
+def _load_all_review_cards(page, total: int | None) -> tuple[dict | None, int, bool]:
+    """Return (card state, pages loaded, whether a Show more control remains)."""
+    state = None
+    try:
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('h2, h3, h5')].some(el => (el.textContent || '').trim() === 'Alumni reviews')",
+            timeout=10000,
+        )
+    except Exception:
+        return None, 0, False
+    page.wait_for_timeout(1000)
+    state = _review_cards(page, "page")
+    if not state:
+        return None, 0, False
+    pages = 1
+    if not state.get("show_more"):
+        return state, pages, False
+    _guarded_click(page.get_by_role("button", name="Show more reviews", exact=True).first)
+    try:
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('[role=\"dialog\"] h2, [role=\"dialog\"] h3, [role=\"dialog\"] h5')]"
+            ".some(el => (el.textContent || '').trim() === 'Alumni reviews')",
+            timeout=15000,
+        )
+    except Exception:
+        raise MavenError("reviews drawer did not open") from None
+    page.wait_for_timeout(1500)
+    state = _review_cards(page, "dialog") or state
+    pages += 1
+    for _ in range(MAX_REVIEW_PAGES):
+        if not state.get("show_more") or (total is not None and len(state["cards"]) >= total):
+            break
+        before = len(state["cards"])
+        more = page.get_by_role("dialog").get_by_role("button", name="Show more reviews", exact=True)
+        if more.count() != 1:
+            break
+        _guarded_click(more.first)
+        state = _wait_more_cards(page, before) or state
+        if len(state["cards"]) <= before:
+            break
+        pages += 1
+    return state, pages, bool(state.get("show_more"))
+
+
+def list_reviews(page, course: str) -> dict:
+    url = public_course_url(course)
+    _goto(page, url)
+    _wait_for(page, REVIEWS_READY_JS, "course page did not finish loading")
+    if canonical_url(page.url) != canonical_url(url):
+        raise MavenError("course page redirected away from the public landing page")
+    try:
+        embedded = page.evaluate(REVIEWS_EMBEDDED_JS)
+    except Exception:
+        embedded = None
+    if not embedded:
+        raise MavenError("course page did not expose embedded course data")
+    total = (embedded.get("metadata") or {}).get("total")
+    state, pages, more_left = _load_all_review_cards(page, total if isinstance(total, int) else None)
+    reviews, completeness = merge_public_reviews(embedded, (state or {}).get("cards"))
+    if more_left:
+        completeness["status"] = "partial"
+    completeness |= {"pages_loaded": pages, "show_more_remaining": more_left}
+    testimonials = parse_testimonials(embedded.get("testimonials"))
+    summary = rating_summary(embedded, (state or {}).get("summary_text"))
+    rated = [item["rating"] for item in reviews if item["rating"] is not None]
+    result = {
+        "command": "reviews list",
+        "source": "public_page",
+        "course": url,
+        "course_name": (embedded.get("course") or {}).get("name"),
+        "rating_summary": summary,
+        "reviews": reviews,
+        "count": len(reviews),
+        "listed_reviews_average": round(sum(rated) / len(rated), 3) if rated else None,
+        "testimonials": testimonials,
+        "testimonial_count": len(testimonials),
+        "notes": [
+            "reviews and testimonials are exactly what the public landing page shows; "
+            "names are the reviewer's public display name",
+            "ratings_count can exceed the number of written reviews: ratings without text are not listed",
+            "per-review rating comes from embedded page data (0-10 stored, shown as 5 stars) "
+            "or from the rendered star icons",
+        ],
+        "completeness": completeness,
+        "observed_at": _now(),
+    }
+    assert_review_output(result)
+    return result
+
+
+def _surveys_href(page, course_url: str) -> str:
+    validate_url(course_url)
+    course_path = course_admin_path(course_url)
+    _goto(page, course_url)
+    _wait_for(page, SURVEYS_NAV_READY_JS, "course Surveys link was not found")
+    try:
+        hrefs = page.evaluate(SURVEYS_NAV_JS)
+    except Exception:
+        raise MavenError("course Surveys link was not found") from None
+    href = choose_students_like(hrefs, course_path, exact=False)
+    if not href or not urlsplit(href).path.rstrip("/").endswith("/surveys"):
+        raise MavenError("course Surveys link was not found")
+    validate_url(href)
+    return href
+
+
+def _select_survey_cards(cards: list[dict], cohort: str | None) -> list[dict]:
+    if not cohort:
+        return cards
+    wanted = " ".join(cohort.split()).casefold()
+    if wanted.isdigit():
+        wanted = f"cohort {wanted}"
+    matches = [card for card in cards if card["label"].casefold() == wanted]
+    if len(matches) != 1:
+        raise MavenError("requested cohort was not in the observed survey list")
+    return matches
+
+
+def _download_survey(page, card: dict, target: Path) -> bytes:
+    buttons = page.get_by_role("button", name=re.compile(SURVEY_BUTTON_RE, re.IGNORECASE))
+    try:
+        button = buttons.nth(card["index"])
+        card_text = button.evaluate(SURVEY_CARD_TEXT_JS)
+    except Exception:
+        raise MavenError("survey responses control was not found") from None
+    if not " ".join((card_text or "").split()).startswith(card["label"]):
+        raise MavenError("survey responses control does not belong to the expected cohort")
+    reserve_output(target)
+    try:
+        with page.expect_download(timeout=60000) as download_info:
+            _guarded_click(button)
+        download_info.value.save_as(str(target))
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise MavenError("survey responses control did not start a download") from None
+    target.chmod(0o600)
+    if stat.S_IMODE(target.stat().st_mode) != 0o600:
+        target.unlink(missing_ok=True)
+        raise MavenError("could not restrict survey file permissions")
+    return target.read_bytes()
+
+
+def list_surveys(
+    page, course_url: str, cohort: str | None, download: bool, output_dir: Path | None, data_dir: Path
+) -> dict:
+    surveys_url = _surveys_href(page, course_url)
+    _goto(page, surveys_url)
+    _wait_for(page, SURVEY_PAGE_READY_JS, "Surveys page did not finish loading")
+    page.wait_for_timeout(1000)
+    try:
+        state = page.evaluate(SURVEY_CARDS_JS)
+    except Exception:
+        raise MavenError("Surveys page could not be read") from None
+    cards = []
+    skipped = 0
+    for raw in state.get("cards") or []:
+        parsed = parse_survey_card(raw)
+        if parsed is None:
+            skipped += 1
+            continue
+        cards.append(parsed | {"index": raw["index"]})
+    labels = [card["label"] for card in cards]
+    if len(labels) != len(set(labels)):
+        raise MavenError("survey cohort labels are not unique")
+    selected = _select_survey_cards(cards, cohort)
+    downloads = []
+    if download:
+        course_token = safe_slug_token(course_admin_path(course_url).rsplit("/", 1)[-1])
+        directory = Path(output_dir).expanduser() if output_dir else data_dir / "downloads"
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        for card in selected:
+            if not card["downloadable"]:
+                continue
+            target = directory / f"survey-{course_token}-{survey_label_token(card['label'])}-{stamp}.csv"
+            payload = _download_survey(page, card, target)
+            try:
+                checked = validate_survey_csv(payload, card["responses"])
+            except Exception:
+                target.unlink(missing_ok=True)
+                raise
+            digest = hashlib.sha256(payload).hexdigest()
+            receipt = _write_receipt(data_dir, {
+                "receipt_version": 1,
+                "kind": "survey_export",
+                "source": "survey_responses_control",
+                "course": course_url,
+                "cohort": card["label"],
+                "file": str(target.resolve()),
+                "sha256": digest,
+                "bytes": len(payload),
+                "columns": checked["columns"],
+                "counts": checked["counts"],
+                "observed_at": _now(),
+            }, prefix="survey-export", pointer=False)
+            downloads.append({
+                "cohort": card["label"],
+                "counts": checked["counts"],
+                "rating": checked["rating"],
+                "columns": checked["columns"],
+                "sha256": digest,
+                "file": _display_path(target),
+                "receipt": _display_path(receipt),
+            })
+    public = [{key: value for key, value in card.items() if key != "index"} for card in selected]
+    result = {
+        "command": "reviews surveys",
+        "source": "browser",
+        "course": course_url,
+        "surveys_url": surveys_url,
+        "course_average": parse_course_survey_average(state.get("average_text")),
+        "cohorts": public,
+        "count": len(public),
+        "total_responses": sum(card["responses"] for card in public),
+        "downloads": downloads,
+        "notes": [
+            "post-course survey ratings are normalized by Maven to a 5-point scale",
+            "written answers and respondent identities stay in the private CSV files; "
+            "stdout reports only aggregates",
+            "the course interest survey and other non-cohort surveys are skipped",
+        ],
+        "skipped_cards": skipped,
         "observed_at": _now(),
     }
     assert_public_output(result)
