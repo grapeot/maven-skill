@@ -22,7 +22,7 @@
 
 | 元素 | 定位 | 说明 |
 |---|---|---|
-| Code | `input[name="code"]` | 折扣码文本。**只允许字母、数字和连字符 `-`**（实测：含下划线 `_` 会被拒，错误文案 `Promo code can only contain letters, numbers, and hyphens`）。无 `maxlength`、无 `placeholder`、无 `required` 属性；唯一性由页面/服务端校验 |
+| Code | `input[name="code"]` | 折扣码文本。**只允许字母、数字和连字符 `-`，不接受下划线 `_`**（实测：含 `_` 被拒，错误文案 `Promo code can only contain letters, numbers, and hyphens`）。构造代码前先自检 `^[A-Za-z0-9-]+$`。无 `maxlength`、无 `placeholder`、无 `required` 属性；唯一性由页面/服务端校验 |
 | Amount off | `input[name="amount_off"]` | 固定金额减免。输入框是空 `text`。**实测输入不带 `$` 的整数即可**；表格**显示**格式为 `$` 前缀 + 千分位逗号（虚构示例 `$100`）。与 Percent off 二选一 |
 | Percent off | `input[name="percent_off"]` | 百分比减免。输入框同样是空 `text`；**实测输入不带 `%` 的数字**即可；表格**显示**格式为 `N%`（虚构示例 `25%`）。与 Amount off 二选一 |
 | 提交 | `button`，文本 `Create promo code` | 在表单内，`type=button`（由 JS 处理提交），当前未禁用。不是区块标题 `Create a promo code` |
@@ -50,7 +50,7 @@
 3. **校验不通过时不一定有弹窗**：已观察到校验失败只以内联文字出现在 Code 字段附近，无对话框、无可辨识的 toast。因此**不能靠「有没有弹窗」判断成败**；判断成败必须回到表格核对新行并刷新复验（见下方流程）。
 4. **金额字段是受控输入**：`code` / `amount_off` / `percent_off` 都由 React 组件状态驱动。正常 `fill()` 或逐字符输入通常会带上 `input` 事件并被 React 接收；但若脚本填完后点击无效、组件状态仍为空，可用原生 setter（`Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set`）+ 派发 `input` / `change` 事件强制写入。先确认 DOM `value` 与组件状态一致再提交。
 5. **新建行 Redemptions 初值是 `-`**，不是 `0`；`Amount off` 显示为 `$` 前缀（填整数 `100` 显示 `$100`）。
-6. **这是创建按钮，未授权不要点**：点击 `Create promo code` 会真实创建折扣码。已实测**没有二次确认对话框**，创建成功后随即出现在表格中（刷新后仍在）。仍属业务写入，必须先获人类对具体动作的单独授权。
+6. **这是创建按钮，未授权不要点**：点击 `Create promo code` 会真实创建折扣码。已实测**没有二次确认对话框**，创建成功后随即出现在表格中。仍属业务写入，必须先获人类对具体动作的单独授权。**成功必须以读回为准**（见下方验收），不能以「点击了、无报错」判定。
 7. **两个「Create」文本要区分**：区块标题是 `Create a promo code`，提交按钮是 `Create promo code`。定位提交按钮时应按精确文本匹配，避免误点到标题。
 8. **金额与百分比的互斥是业务规则**：HTML 层不阻止同时填写两个字段，但语义上只能用一个；创建时应只填其一并把另一个留空。
 9. **分享链接不在表格文字里**：Maven 帮助中心说创建后用 link 图标复制分享链接，截图里的形态是落地页加 `?promoCode=` 一类参数。页面上的 `Direct payment link` 区块是**班期 join 链接**（形态 `/<cohort-id>/join?seats=1`），查询参数里没有 promo，不能拿来拼折扣链接。`Marketing` 区另有一个文本为 `Create share link`、字段为 `email` 的控件，与折扣分享链接无关，不要点。
@@ -62,7 +62,7 @@
 2. 等到 `input[name="code"]` 出现。
 3. 写入 `code`（只含 `[A-Za-z0-9-]`）与 `amount_off`（纯数字，不带 `$`）或 `percent_off`（纯数字，不带 `%`），另一个留空；确认 DOM `value` 与组件状态一致。
 4. 点击精确文本为 `Create promo code` 的按钮。
-5. **验收**：到表格查找该 Code，确认额度与预期一致；再 `reload` 页面复验该行仍在。新建行的 `Redemptions` 显示为 `-`。表格行数会随创建增加，但不要把它当作唯一判据。
+5. **验收（写入后必须读回）**：点击提交后**不能**以「点击了、无报错、界面有变化」判定成功。必须回到权威视图独立复验——重新 `reload` 页面，在 Promo codes 表格中查找该 Code，确认额度与预期一致、该行确实存在。只有读回确认后才算完成。新建行的 `Redemptions` 显示为 `-`（表格行数会随创建增加，但不要把它当作唯一判据）。
 6. 失败排查：若点击后表格无新行，检查 Code 是否含下划线/特殊字符，并读取 Code 字段附近的内联提示。
 
 > 已实测：先提交一个含下划线的代码被内联校验拒绝（无网络请求），换成连字符版本后创建成功；表格出现新行、`reload` 后仍在。本文档不记录真实代码名与真实额度。
