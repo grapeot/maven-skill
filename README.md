@@ -178,7 +178,7 @@ lessons 命令只导航和读取：所有 lesson 页面经只读门面访问，�
 
 [`skills/maven/references/promo_codes.md`](skills/maven/references/promo_codes.md) 记录了课程 Settings 页 Payments 组内 Promo codes 区块的结构：常驻内联创建表单（`input[name="code"]`、`amount_off` 与 `percent_off` 二选一的 `OR` 规则、提交按钮 `Create promo code`）、已有码表格（Code / Amount off / Percent off / Redemptions / Actions）与相关坑点。折扣码属于课程、对全部班期生效，可删除或暂停，不支持 100% off。
 
-经授权实测创建的坑点：Code 只接受字母、数字、连字符（含下划线会被客户端校验拒绝，且不发出请求、无弹窗，表现为「点了没反应」）；校验失败只有内联提示，不能靠有无弹窗判断；金额字段是 React 受控输入，若脚本填写后点击无效可用原生 setter + 事件强制写入；`amount_off` 填整数；新建行 Redemptions 初值为 `-`；验收须刷新页面复验新行仍在。
+经授权实测创建的坑点：Code 只接受字母、数字、连字符（含下划线会被客户端校验拒绝，且不发出请求、无弹窗，表现为「点了没反应」）；已观察到校验失败只显示内联提示的情况，因此不能只靠有无弹窗判断成败；金额字段是 React 受控输入，若脚本填写后点击无效可用原生 setter + 事件强制写入；`amount_off` 填整数；新建行 Redemptions 初值为 `-`；验收须刷新页面复验新行仍在。
 
 CLI 目前没有创建或管理 promo code 的命令，也不实现任何此类写入。只读核对（导航到 Settings、读取 Promo codes 区块与表格）无需授权；创建、暂停、删除折扣码都属于业务写入，CLI 不实现，默认由人类操作，Agent 仅在用户对具体动作单独显式授权后才可协助。参考文档与操作步骤本身不构成授权。
 
