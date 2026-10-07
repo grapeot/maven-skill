@@ -51,6 +51,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 | 只读查看 Lightning Lesson | `maven-skill lessons list`<br>`maven-skill lessons show --lesson <ID_OR_URL>`<br>`maven-skill lessons stats --all`（或 `--lesson <ID_OR_URL>`） | [references/lightning_lessons.md](references/lightning_lessons.md) |
 | 读课程评价（公开评价 / 班期问卷评分） | `maven-skill reviews list --course <PUBLIC_COURSE_URL\|COURSE_ADMIN_URL>`<br>`maven-skill reviews surveys --course <COURSE_ADMIN_URL> [--download [--cohort <LABEL\|N>] [--output-dir <DIR>]]` | [references/reviews.md](references/reviews.md) |
 | 只读核对折扣码（promo code） | 无 CLI，浏览器只读观察 | [references/promo_codes.md](references/promo_codes.md) |
+| 生成带折扣的分享链接 | 无 CLI，按格式拼接后用未登录浏览器验收 | [references/promo_codes.md](references/promo_codes.md)「折扣分享链接」 |
 | 会话与登录配置 | `maven-skill session open\|status\|save\|close` | [references/session.md](references/session.md) |
 
 命令细节见对应 reference；只有第 2 节的会话连通检查是串行前置，其余只读任务按需单独执行，不必按顺序走。
