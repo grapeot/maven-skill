@@ -16,6 +16,7 @@ from maven_skill.ops import (
     run_business,
     show_lesson,
 )
+from maven_skill.promo import list_promo_codes, locate_pause, render_list, render_locate
 from maven_skill.session import Session
 
 
@@ -54,6 +55,15 @@ def build_parser() -> argparse.ArgumentParser:
     surveys.add_argument("--cohort")
     surveys.add_argument("--download", action="store_true")
     surveys.add_argument("--output-dir", type=Path)
+    promo = groups.add_parser("promo-codes").add_subparsers(dest="action", required=True)
+    promo_list = promo.add_parser("list")
+    promo_list.add_argument("--course", required=True)
+    promo_list.add_argument("--json", action="store_true", dest="as_json")
+    locate = promo.add_parser("locate-pause")
+    locate.add_argument("--course", required=True)
+    locate.add_argument("--code", required=True)
+    locate.add_argument("--output-dir", type=Path, required=True)
+    locate.add_argument("--json", action="store_true", dest="as_json")
     return parser
 
 
@@ -107,6 +117,20 @@ def main(argv: list[str] | None = None) -> int:
             result = run_business(
                 session, args.auth_state, lambda page: list_reviews(page, args.course)
             )
+        elif args.group == "promo-codes" and args.action == "list":
+            result = run_business(
+                session, args.auth_state, lambda page: list_promo_codes(page, args.course)
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2) if args.as_json else render_list(result))
+            return 0
+        elif args.group == "promo-codes":
+            result = run_business(
+                session,
+                args.auth_state,
+                lambda page: locate_pause(page, args.course, args.code, args.output_dir),
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2) if args.as_json else render_locate(result))
+            return 3 if result["verdict"] == "not_ready" else 0
         elif args.group == "reviews":
             if args.output_dir is not None and not args.download:
                 raise MavenError("--output-dir requires --download")

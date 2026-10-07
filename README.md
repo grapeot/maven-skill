@@ -186,19 +186,35 @@ lessons 命令只导航和读取：所有 lesson 页面经只读门面访问，�
 
 两个命令都不回复、不发布、不隐藏评价。`reviews list` 输出的是公开页面已展示的内容（含评价者显示名）；问卷 CSV 中的姓名、邮箱与私下留言只留在本地。详见 [`skills/maven/references/reviews.md`](skills/maven/references/reviews.md)。
 
-### 6. Lightning Lesson 参考
+### 6. 折扣码只读命令 (`promo-codes`)
+
+- **列出折扣码与状态**：
+  ```bash
+  maven-skill promo-codes list --course https://maven.com/<school>/admin/courses/<course> [--json]
+  ```
+  读取课程 Settings 页的 Promo codes 表格，逐行输出 code、amount off、percent off、redemptions 与 status（`active` / `paused` / `unknown`）。status 综合三个信号：切换按钮图标的几何形状（双竖条 / 三角形）、行是否置灰（`text-gray-400`）、页面 React 数据中按行对齐的 `active`（可选，读不到时降级而不报错）；信号不一致时报 `unknown`。同时标记大小写不敏感的重复码。默认输出文本表格，`--json` 输出完整结构。`--course` 也接受 `<school>/<course>` 或裸课程 slug（裸 slug 经账号菜单发现课程）。
+
+- **定位某个码的暂停按钮**：
+  ```bash
+  maven-skill promo-codes locate-pause --course https://maven.com/<school>/admin/courses/<course> --code <CODE> --output-dir <DIR> [--json]
+  ```
+  要求该码在表中唯一、该行恰好 3 个按钮，用四项检查（图标几何、onClick 源码含 `active` 切换与 `"Paused"`、另两个按钮分别是复制链接和删除、当前 active）识别暂停按钮：四项都过为 `high`，缺 React 数据为 `medium`；码已暂停时报 `already_paused`。在输出目录写入行截图 `row.png`、用 PIL 框出按钮的 `annotated.png`（不改 DOM）与 `evidence.json`，并用无 cookie 的 context 打开 `?promoCode=` 公开链接记录划线价基线。退出码：`ready_to_pause` / `already_paused` 为 0，`not_ready` 为 3。`--course` 只接受课程管理页 URL 或 `<school>/<course>`。
+
+两个命令都不点击 Actions 列任何按钮、不在 Settings 页输入任何内容；Settings 页只经没有点击、输入、hover 接口的只读门面访问。暂停本身是业务写入，CLI 不实现。输出含真实码名与额度，只留在本地。详见 [`skills/maven/references/promo_codes.md`](skills/maven/references/promo_codes.md)。
+
+### 7. Lightning Lesson 参考
 
 [`skills/maven/references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) 记录了 Lightning Lesson 管理界面的导航路径、编辑器字段限制（标题 ≤ 60、outcome 描述 ≤ 120、`topic_desc` ≤ 450 等）与行为坑点（字段自动保存、创建与删除讲师无确认、事件链接是硬性发布阻断项）。CLI 只提供上面的只读 `lessons` 命令，不实现任何编辑器写入；Publish、创建 Zoom 会议、邮件与课程级折扣码写入默认由人类操作。
 
-### 7. Promo Code（折扣码）参考
+### 8. Promo Code（折扣码）参考
 
-[`skills/maven/references/promo_codes.md`](skills/maven/references/promo_codes.md) 记录了课程 Settings 页 Payments 组内 Promo codes 区块的结构：常驻内联创建表单（`input[name="code"]`、`amount_off` 与 `percent_off` 二选一的 `OR` 规则、提交按钮 `Create promo code`）、已有码表格（Code / Amount off / Percent off / Redemptions / Actions）与相关坑点。折扣码属于课程、对全部班期生效，可删除或暂停，不支持 100% off。带折扣的分享链接格式是落地页加 `?promoCode=<CODE>`（已实测；`?coupon=` 等写法不生效），详见参考文档。
+[`skills/maven/references/promo_codes.md`](skills/maven/references/promo_codes.md) 记录了课程 Settings 页 Payments 组内 Promo codes 区块的结构：常驻内联创建表单（`input[name="code"]`、`amount_off` 与 `percent_off` 二选一的 `OR` 规则、提交按钮 `Create promo code`）、已有码表格（Code / Amount off / Percent off / Redemptions / Actions）与相关坑点。Actions 列中间按钮是暂停/恢复切换：单击即生效、没有确认框，重复点击会重新激活；删除按钮有浏览器原生 confirm。暂停的行整行置灰，图标随状态在双竖条与三角形之间切换。表中可能有同名重复码，按码查找必须校验唯一，数据按行而不是按码文本配对。暂停是否生效可用无 cookie 打开 `?promoCode=` 公开链接验证：激活的码显示划线价，暂停后划线价消失。折扣码属于课程、对全部班期生效，可删除或暂停，不支持 100% off。带折扣的分享链接格式是落地页加 `?promoCode=<CODE>`（已实测；`?coupon=` 等写法不生效），详见参考文档。
 
 经授权实测创建的坑点：Code 只接受字母、数字、连字符（含下划线会被客户端校验拒绝，且不发出请求、无弹窗，表现为「点了没反应」）；已观察到校验失败只显示内联提示的情况，因此不能只靠有无弹窗判断成败；金额字段是 React 受控输入，若脚本填写后点击无效可用原生 setter + 事件强制写入；`amount_off` 填整数；新建行 Redemptions 初值为 `-`；验收须刷新页面复验新行仍在。
 
-CLI 目前没有创建或管理 promo code 的命令，也不实现任何此类写入。只读核对（导航到 Settings、读取 Promo codes 区块与表格）无需授权；创建、暂停、删除折扣码都属于业务写入，CLI 不实现，默认由人类操作，Agent 仅在用户对具体动作单独显式授权后才可协助。参考文档与操作步骤本身不构成授权。
+CLI 只提供上面的只读 `promo-codes` 命令，没有创建、暂停或删除 promo code 的命令，也不实现任何此类写入。只读核对（导航到 Settings、读取 Promo codes 区块与表格）无需授权；创建、暂停、删除折扣码都属于业务写入，CLI 不实现，默认由人类操作，Agent 仅在用户对具体动作单独显式授权后才可协助。参考文档与操作步骤本身不构成授权。
 
-### 8. 主 Skill 结构与参考
+### 9. 主 Skill 结构与参考
 
 [`skills/maven/SKILL.md`](skills/maven/SKILL.md) 按 **runbook** 组织：一个「前置会话闸 + 任务路由表」的骨架，把每个任务的细节下沉到 `skills/maven/references/` 下。会话连通是唯一串行前置，其余任务按需单独执行，不必按顺序走。
 
@@ -209,7 +225,7 @@ CLI 目前没有创建或管理 promo code 的命令，也不实现任何此类�
 | [`references/students_export.md`](skills/maven/references/students_export.md) | `students export` 的命令、标签页生命周期、CSV 校验与收据 |
 | [`references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) | Lightning Lesson 管理界面契约、CLI 输出语义与坑点 |
 | [`references/reviews.md`](skills/maven/references/reviews.md) | 公开评价与班期问卷评分的读取契约、评分换算与隐私边界 |
-| [`references/promo_codes.md`](skills/maven/references/promo_codes.md) | 折扣码区块与写入授权边界 |
+| [`references/promo_codes.md`](skills/maven/references/promo_codes.md) | 折扣码区块、Actions 按钮身份、`promo-codes` 只读命令与写入授权边界 |
 
 
 ---
@@ -222,7 +238,7 @@ CLI 目前没有创建或管理 promo code 的命令，也不实现任何此类�
    - 导出 CSV、认证快照文件及收据文件权限为 `0600`；
    - 导出的 CSV 文件若已存在，拒绝覆盖已有文件。
 3. **敏感文件全量忽略**：`.local/` 目录、下载文件、运行日志及 `.env` 均加入 `.gitignore`，严禁提交到代码仓库。
-4. **只读业务边界**：本工具仅用于只读观察、名单导出、Lightning Lesson 只读查看与课程评价读取。严禁修改课程或学生数据，严禁发送邀请，严禁调用任何外部结算或记账写入接口。
+4. **只读业务边界**：本工具仅用于只读观察、名单导出、Lightning Lesson 只读查看、课程评价读取与折扣码状态读取。严禁修改课程或学生数据，严禁发送邀请，严禁调用任何外部结算或记账写入接口。
 5. **脱敏与脱密**：业务命令 stdout 绝不打印学员姓名与邮箱（`reviews list` 仅输出公开页面已展示的评价者显示名）。公共仓库中仅使用虚拟示例。
 
 ---

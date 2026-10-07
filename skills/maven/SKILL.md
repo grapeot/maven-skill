@@ -1,11 +1,11 @@
 ---
 name: maven
-description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports, read Lightning Lesson drafts and aggregate stats, and read course reviews (public landing-page reviews and per-cohort post-course survey ratings) without writing.
+description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports, read Lightning Lesson drafts and aggregate stats, read course reviews (public landing-page reviews and per-cohort post-course survey ratings), and list promo codes with their active/paused status or locate a code's pause toggle for a human, without writing.
 ---
 
 # Maven Agent Skill
 
-本技能是面向 Maven（maven.com）平台的只读工具，采用「浏览器优先、人工登录、Agent 观察」架构，通过 Chrome DevTools Protocol (CDP) 连接已登录的 Chrome 实例，执行课程与班期观察、Lightning Lesson 查看、课程评价读取及已校验的报名学员名单导出。
+本技能是面向 Maven（maven.com）平台的只读工具，采用「浏览器优先、人工登录、Agent 观察」架构，通过 Chrome DevTools Protocol (CDP) 连接已登录的 Chrome 实例，执行课程与班期观察、Lightning Lesson 查看、课程评价读取、折扣码状态读取与暂停按钮定位，以及已校验的报名学员名单导出。
 
 > **阶段状态说明**：默认持久 profile 路线已验证（支持课程发现、最新班期选择、CSV 导出及重启与临时 headless 运行）。`--auth-state` 隔离逻辑属于实验路径，离线测试通过但在实机新 context 中认证恢复失败，不保证可移植登录。
 
@@ -50,7 +50,8 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 | 导出 Enrolled 学员 CSV | `maven-skill students export --course <COURSE_ADMIN_URL> --cohort latest\|<COHORT_SLUG> [--output <PATH>]` | [references/students_export.md](references/students_export.md) |
 | 只读查看 Lightning Lesson | `maven-skill lessons list`<br>`maven-skill lessons show --lesson <ID_OR_URL>`<br>`maven-skill lessons stats --all`（或 `--lesson <ID_OR_URL>`） | [references/lightning_lessons.md](references/lightning_lessons.md) |
 | 读课程评价（公开评价 / 班期问卷评分） | `maven-skill reviews list --course <PUBLIC_COURSE_URL\|COURSE_ADMIN_URL>`<br>`maven-skill reviews surveys --course <COURSE_ADMIN_URL> [--download [--cohort <LABEL\|N>] [--output-dir <DIR>]]` | [references/reviews.md](references/reviews.md) |
-| 只读核对折扣码（promo code） | 无 CLI，浏览器只读观察 | [references/promo_codes.md](references/promo_codes.md) |
+| 只读核对折扣码（promo code）状态 | `maven-skill promo-codes list --course <COURSE_ADMIN_URL\|<SCHOOL>/<COURSE>\|COURSE_SLUG> [--json]` | [references/promo_codes.md](references/promo_codes.md) |
+| 定位某个码的暂停按钮（供人类操作） | `maven-skill promo-codes locate-pause --course <COURSE_ADMIN_URL\|<SCHOOL>/<COURSE>> --code <CODE> --output-dir <DIR> [--json]` | [references/promo_codes.md](references/promo_codes.md) 第 3、5 节 |
 | 生成带折扣的分享链接 | 无 CLI，按格式拼接后用未登录浏览器验收 | [references/promo_codes.md](references/promo_codes.md)「折扣分享链接」 |
 | 会话与登录配置 | `maven-skill session open\|status\|save\|close` | [references/session.md](references/session.md) |
 
@@ -58,7 +59,9 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 
 **Maven 业务写入的通用规则**（CLI 本身只读；折扣码与 Lightning Lesson 编辑器等写入路径见对应 reference，且都需先获授权）：
 
-- **授权**：创建、暂停、删除折扣码是业务写入，CLI 不实现，默认由人类操作，Agent 仅在用户对**具体动作**单独显式授权后才可协助；参考文档与操作步骤本身不构成授权（详见 [references/promo_codes.md](references/promo_codes.md) 与第 5 节）。
+- **授权**：创建、暂停、删除折扣码是业务写入，CLI 不实现，默认由人类操作，Agent 仅在用户对**具体动作**单独显式授权后才可协助；参考文档与操作步骤本身不构成授权（详见 [references/promo_codes.md](references/promo_codes.md) 与第 5 节）。`locate-pause` 给出高置信度只代表按钮已识别，不代表获得暂停授权。
+- **暂停是单击切换**：Actions 列中间按钮单击即暂停（已暂停时单击即恢复），没有确认框；重复点击会重新激活。结果不确定时不要重试，先刷新读回，或用无 cookie 打开 `?promoCode=` 公开链接看划线价是否消失。
+- **重复码**：Maven 允许同名码（含大小写变体）共存。按码查找必须校验唯一，数据按行配对而不是按码文本配对。
 - **Code 字符集**：Maven 折扣码只接受字母、数字和连字符 `-`，**不接受下划线**。构造代码时先做 `^[A-Za-z0-9-]+$` 自检。含 `_` 的代码会被客户端校验拒绝；已观察到的一种形态是既不发请求也无弹窗，表现为「点了没反应」，因此不能靠界面反馈猜测成败。
 - **写后必须读回验证**：任何写入完成后，不能以「点击了、无报错、界面有反应」当成功。必须重新加载页面、读回权威视图（表格/详情），确认目标变更真的存在且符合预期，才算完成。这是所有写入任务的通则，不限于折扣码。
 
@@ -86,6 +89,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 - **只读交互约束**：
   - `lessons` 系列命令只导航和读取，不点击任何可写控件，不输入任何文字；事件链接只输出布尔值。
   - `reviews` 系列命令不回复、不发布、不隐藏任何评价，只点击 `Show more reviews` 与（`--download` 时）班期问卷的 `N responses` 下载按钮。
+  - `promo-codes` 系列命令不点击 Actions 列任何按钮、不在 Settings 页输入任何内容；Settings 页只经无点击能力的只读门面访问，只截图与测量按钮位置。
 - **隐私与脱敏保护**：
   - 严禁在公开文档、日志或交互回复中打印真实学员信息；所有公开文档与测试一律用虚拟示例（fake examples）。
   - 遇到异常时输出脱敏的错误信息，杜绝暴露 Cookie 或敏感凭据。

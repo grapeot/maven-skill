@@ -7,7 +7,7 @@ name = "maven-skill"
 version = "0.1.0"
 description = "Browser-first Maven session tools for AI agents"
 requires-python = ">=3.12"
-dependencies = ["playwright>=1.51,<2"]
+dependencies = ["playwright>=1.51,<2", "pillow>=10,<13"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]

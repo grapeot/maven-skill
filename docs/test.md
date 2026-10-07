@@ -19,7 +19,7 @@
 source .venv/bin/activate
 pytest
 ```
-当前套件共包含 **201 项自动化测试**（含参数化用例），全部保持通过。
+当前套件共包含 **288 项自动化测试**（含参数化用例），全部保持通过。
 
 ### 2.1 会话管理与 CDP 安全测试 (`tests/test_session.py`)
 - **导航 URL 安全过滤**：限制仅允许 `maven.com` 域名下的 HTTPS 链接，阻断非 Maven 域、HTTP 协议以及携带账号密码凭据的 URL。
@@ -73,6 +73,17 @@ pytest
 - **命令编排**：假页面驱动 `Show more reviews` 分页，断言只点击该按钮；单页不点击；重定向报错；点击守卫拒绝写入标签；`reviews surveys` 不加 `--download` 时零点击零文件，加 `--download` 时只点击目标班期按钮、文件 `0600`、写 `survey-export-*` 收据、stdout 无姓名邮箱与留言；无效下载被删除；静态检查新增脚本不含写入模式且内嵌读取不取 `user_id` 与头像。
 - **CLI**：参数解析；`--output-dir` 必须配合 `--download`。
 
+### 2.6 折扣码只读命令测试 (`tests/test_promo.py`)
+- **课程引用**：课程管理页 URL（含 `/settings?cohort=` 子路径）与 `<school>/<course>` 规范化为管理页；裸 slug 交给课程发现且必须唯一命中；拒绝非 HTTPS、非 maven.com、非管理页与多级路径。公开链接拼接、share slug 覆盖与码值转义。
+- **图标几何**：用 Maven 管理界面的图标路径（UI 资源，非业务数据）验证双竖条判为暂停、右指三角形判为恢复、链接与垃圾桶；单竖条、横向矩形、左指三角形与错误 viewBox 判为 unknown。
+- **handler 源码**：用虚构的压缩源码形状验证切换（含 `active:`、`"Paused"` 与取反）、复制、删除与缺失；源码与几何矛盾时报 conflict。
+- **表格解析**：虚构码（`FRIENDS50`、`SPRING25`、`demo-pass` / `DEMO-PASS`）验证金额、百分比、兑换次数（`-` 记 0、千分位）、三信号合成 status、不一致报 unknown、React 数据缺失或按行错位时降级、大小写不敏感重复码；表头改版或表格不唯一时报错。
+- **locate-pause 判定**：四项全过为 high；缺 handler 与 React 数据为 medium；不依赖按钮位置；切换按钮源码像删除、另两个按钮不是复制加删除、按钮数不为 3 时 not_ready；已暂停报 already_paused；状态冲突 not_ready；唯一性校验。
+- **画框**：按设备像素比例换算包围盒，框在按钮外沿，`not_ready` 不画框。
+- **只读门面**：`PromoReader` 不暴露 click / hover / fill / type / 键盘 / locator 等接口，只执行登记脚本、只导航到 maven.com；登记脚本不含写入模式；模块源码中没有任何点击、hover、输入调用。
+- **命令编排**：假页面跑 `list` 与 `locate-pause`，断言 locator 只用于计数、读文本、滚动、截图和测量；产物目录 `0700`、文件 `0600`；无 cookie context 用后关闭；公开检查失败不影响判定；重复码、缺失码、裸 slug 在写产物或导航前拒绝。
+- **CLI**：参数解析；文本与 `--json` 输出；退出码 0 / 3；意外异常脱敏。
+
 ---
 
 ## 3. 实机验证状态清单 (Empirical Verification Status)
@@ -86,4 +97,5 @@ pytest
 | **跨 Chrome 重启登录态保持** | 关闭后重启同一 profile，验证是否保留登录 | 通过 | 临时 headless Chrome 中登录保持，业务查询正常 |
 | **Lightning Lesson 只读命令** | `lessons list`、草稿与已结束 lesson 的 `lessons show`、`lessons stats --lesson` 与 `--all` | 已实测通过 | 列表完整性 complete；字段、计数器、链接布尔值、发布错误与聚合统计正确；输出无邮箱与会议链接；运行前后浏览器标签页集合一致，未修改任何 lesson |
 | **课程评价只读命令** | `reviews list` 公开落地页全量分页、`reviews surveys` 聚合与 `--download` 全部班期 | 已实测通过 | 公开评价逐页加载至抽屉无 `Show more`，条数等于内嵌总数，半星/空心星识别正确；问卷各班期均值与页面一致，CSV 行数与按钮回复数一致、文件 `0600` 且留在私有目录；公开评价总数等于各班期 CSV 公开评价数之和，评分总数等于问卷回复总数 |
+| **折扣码只读命令** | `promo-codes list` 全表、`promo-codes locate-pause` 对激活码、已暂停码与重复码 | 已实测通过 | 全表三信号一致无 unknown，重复码全部标出；激活码四项全过 high、框住双竖条、公开链接有划线价；已暂停码报 already_paused、公开链接无划线价；重复码拒绝；未点击 Actions 按钮，标签页与临时 context 均关闭 |
 | **独立 agent headless 导出** | 动态发现课程、选择 latest、导出并与首份 CSV 比较 | 通过 | 行数、全列值、规范化邮箱/时间集合一致，输出与 receipt 私有；仅验证 profile 路线 |

@@ -25,7 +25,7 @@
   - 使用 `uv pip install` 管理依赖，禁止使用全局 `pip install`。
   - 开发环境安装命令：`uv pip install -e '.[dev]'`。
 - **自动化测试**：
-  - 代码改动后使用 `pytest` 运行离线单元测试（包含 201 项核心测试与隐私安全断言）。
+  - 代码改动后使用 `pytest` 运行离线单元测试（包含 288 项核心测试与隐私安全断言）。
   - 单元测试严禁对真实的外部网络发出真实网络请求。
 
 ---
@@ -40,14 +40,14 @@
   - 文件系统权限必须符合最小特权原则：目录 `0700`，凭证、导出 CSV、收据及状态文件 `0600`。
 - **输出与页面快照脱敏**：
   - 页面观察命令（`maven-skill page snapshot`）所提取的页面文字可能包含真实学员信息，仅供本地分析，不得记录到长期公共文档或公开日志中。
-  - 业务命令（`courses list`、`cohorts list`、`students export`、`lessons list/show/stats`、`reviews surveys`）的 stdout 仅输出结构化状态与聚合计数，严禁打印学员姓名与邮箱。`reviews list` 例外：它只输出公开落地页上已展示的评价（含评价者显示名），仍不得输出邮箱。
+  - 业务命令（`courses list`、`cohorts list`、`students export`、`lessons list/show/stats`、`reviews surveys`、`promo-codes list/locate-pause`）的 stdout 仅输出结构化状态与聚合计数，严禁打印学员姓名与邮箱。`promo-codes` 输出的码名、额度与兑换次数是业务数据，只留在本地，不得写进仓库。`reviews list` 例外：它只输出公开落地页上已展示的评价（含评价者显示名），仍不得输出邮箱。
 
 ---
 
 ## 4. 业务边界与事实原则
 
 - **业务命令范围**：
-  - 本仓库已实现 v0.1 只读业务 CLI（包括 `courses list`、`cohorts list`、`students export`）、Lightning Lesson 只读命令（`lessons list`、`lessons show`、`lessons stats`）、课程评价只读命令（`reviews list`、`reviews surveys`）与会话/页面基础设施。lessons 命令只导航和读取，不得新增任何点击或输入；reviews 命令只允许经点击守卫的 `Show more reviews` 与问卷 `N responses` 下载按钮，不得回复、发布或隐藏评价。
+  - 本仓库已实现 v0.1 只读业务 CLI（包括 `courses list`、`cohorts list`、`students export`）、Lightning Lesson 只读命令（`lessons list`、`lessons show`、`lessons stats`）、课程评价只读命令（`reviews list`、`reviews surveys`）、折扣码只读命令（`promo-codes list`、`promo-codes locate-pause`）与会话/页面基础设施。lessons 命令只导航和读取，不得新增任何点击或输入；reviews 命令只允许经点击守卫的 `Show more reviews` 与问卷 `N responses` 下载按钮，不得回复、发布或隐藏评价；promo-codes 命令在 Settings 页只经无点击能力的只读门面读取与截图，不得新增任何点击、hover 或输入，暂停/恢复/删除折扣码不得实现为默认可用的命令。
   - 命令实现基于真实 DOM 观察契约（从账号菜单动态路由至 Dashboard 与 Courses，交叉核验 Student home 与 settings 链接确定 Cohort slug，原生导出对话框筛选 Enrolled 学员）。
   - **不逆向私有 API**：保持浏览器优先策略，不逆向 Maven 私有接口。
   - **无 Ledger 耦合**：本仓库不包含任何 Ledger 业务规则或外部系统数据写入代码。

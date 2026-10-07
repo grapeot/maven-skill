@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-10-07（续）: 折扣码只读命令 `promo-codes list` / `promo-codes locate-pause`
+
+### 变更
+- 修正 `references/promo_codes.md` 第 3 节：Actions 列中间按钮是暂停/恢复切换（单击即生效、无确认，重复点击会重新激活），删除按钮有浏览器原生 confirm；暂停行 `tr` 带 `text-gray-400`，图标随状态在双竖条与三角形之间切换。原文「中间按钮 SVG 路径在多行间不稳定」是误读：路径随状态变化，又被同名重复码按文本配对放大。新增重复码规则（查找校验唯一、按行配对数据）与公开链接划线价验证法。
+- 新增 `promo-codes list --course <...> [--json]`：输出 code、amount off、percent off、redemptions、status；status 综合图标几何、行置灰、按行对齐的 React `active`（可选信号，读不到时降级）；信号不一致报 `unknown`；标记大小写不敏感的重复码。默认文本表格，`--json` 输出完整结构。
+- 新增 `promo-codes locate-pause --course <...> --code <CODE> --output-dir <DIR> [--json]`：要求码唯一、行内恰好 3 个按钮；四项检查（E1 图标几何、E2 onClick 源码、E3 另两个按钮是复制与删除、E4 当前 active）全过为 `high`，缺 React 数据为 `medium`；已暂停报 `already_paused`。产物 `row.png`、`annotated.png`（PIL 画框，不改 DOM）、`evidence.json`，并用无 cookie context 记录 `?promoCode=` 公开链接的划线价基线。退出码 0 / 3（`not_ready`）/ 1。
+- 新模块 `src/maven_skill/promo.py`：Settings 页只经 `PromoReader` 门面访问（导航、登记脚本、单行截图与包围盒），没有 click / fill / hover / 键盘 / locator 接口，模块内没有任何点击调用。`locate-pause` 不接受裸 slug，整个运行零点击；`list` 的裸 slug 走既有课程发现流程。
+- 新增依赖 `pillow`（画框）。SKILL 路由表、README、AGENTS、`docs/test.md` 同步；测试 201 → 288 项。
+
+### 设计取舍
+- 图标识别按几何而不是整串路径常量：把路径拆成子路径，两条分开的、高大于宽两倍的轴对齐矩形判为暂停，带竖直底边、顶点在右的直边三角形判为恢复；链接与垃圾桶也按几何兜底。已知路径前缀只作为证据记录。
+- React 数据与 onClick 源码来自压缩后的前端代码，AGENTS 要求不逆向私有 API，这里只读页面已加载的数据、不调用任何接口，并把它们作为可选信号：读不到时 `list` 降级、`locate-pause` 降为 `medium`。
+- 码不存在或重复时直接报错退出、不写产物；按钮数不对或检查失败时仍写截图与证据，方便人工排查。
+
+### 实机只读验证（headless 持久 profile，只记录聚合结论）
+- [x] `promo-codes list`：全表逐行三信号一致，无 `unknown`；激活与暂停计数与此前探测一致；React 数据按行对齐；大小写不敏感的重复码全部标出。
+- [x] `promo-codes locate-pause` 对一个激活的唯一码：`ready_to_pause`、`high`，四项全过，目标为中间按钮；`annotated.png` 框住双竖条；公开链接有划线价。
+- [x] 对一个已暂停的唯一码：`already_paused`、`high`，图标为三角形；公开链接无划线价。
+- [x] 对重复码报 `not unique` 退出；裸 slug 被 `locate-pause` 拒绝；`list` 的裸 slug 发现正常。
+- [x] 运行后浏览器只剩原有标签页，无 cookie context 已关闭；未点击 Actions 列任何按钮，未在 Settings 页输入。
+- [x] 离线测试 288 项与 `scripts/privacy_review.py` 通过。
+
 ## 2026-10-07: 折扣分享链接格式写入 reference
 
 - `references/promo_codes.md` 新增「折扣分享链接」一节：格式为落地页加 `?promoCode=<CODE>`，参数名 C 大写，码值不区分大小写；`?coupon=`、`?promo=`、`?code=`、`?discount=`、`?promo_code=` 不生效。原第 9 条里「截图里的形态是 `?promoCode=` 一类参数」的推测改为指向实测结论。
