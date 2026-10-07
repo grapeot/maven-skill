@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-10-07: 折扣分享链接格式写入 reference
+
+- `references/promo_codes.md` 新增「折扣分享链接」一节：格式为落地页加 `?promoCode=<CODE>`，参数名 C 大写，码值不区分大小写；`?coupon=`、`?promo=`、`?code=`、`?discount=`、`?promo_code=` 不生效。原第 9 条里「截图里的形态是 `?promoCode=` 一类参数」的推测改为指向实测结论。
+- 证据：2026-10-06 用未登录的无头 Chromium 逐个打开各种参数写法，只有 `promoCode` 让报名卡片出现划线原价和折后价；与 Maven 支持邮件中给出的同格式链接一致。
+- SKILL.md 任务路由表新增一行「生成带折扣的分享链接」；README 折扣码段落补一句格式说明。纯文档改动，无代码变化。
+
 ## 2026-10-06: 课程评价只读命令 `reviews list` / `reviews surveys`
 
 ### 变更

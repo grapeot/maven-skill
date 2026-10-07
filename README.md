@@ -192,7 +192,7 @@ lessons 命令只导航和读取：所有 lesson 页面经只读门面访问，�
 
 ### 7. Promo Code（折扣码）参考
 
-[`skills/maven/references/promo_codes.md`](skills/maven/references/promo_codes.md) 记录了课程 Settings 页 Payments 组内 Promo codes 区块的结构：常驻内联创建表单（`input[name="code"]`、`amount_off` 与 `percent_off` 二选一的 `OR` 规则、提交按钮 `Create promo code`）、已有码表格（Code / Amount off / Percent off / Redemptions / Actions）与相关坑点。折扣码属于课程、对全部班期生效，可删除或暂停，不支持 100% off。
+[`skills/maven/references/promo_codes.md`](skills/maven/references/promo_codes.md) 记录了课程 Settings 页 Payments 组内 Promo codes 区块的结构：常驻内联创建表单（`input[name="code"]`、`amount_off` 与 `percent_off` 二选一的 `OR` 规则、提交按钮 `Create promo code`）、已有码表格（Code / Amount off / Percent off / Redemptions / Actions）与相关坑点。折扣码属于课程、对全部班期生效，可删除或暂停，不支持 100% off。带折扣的分享链接格式是落地页加 `?promoCode=<CODE>`（已实测；`?coupon=` 等写法不生效），详见参考文档。
 
 经授权实测创建的坑点：Code 只接受字母、数字、连字符（含下划线会被客户端校验拒绝，且不发出请求、无弹窗，表现为「点了没反应」）；已观察到校验失败只显示内联提示的情况，因此不能只靠有无弹窗判断成败；金额字段是 React 受控输入，若脚本填写后点击无效可用原生 setter + 事件强制写入；`amount_off` 填整数；新建行 Redemptions 初值为 `-`；验收须刷新页面复验新行仍在。
 
