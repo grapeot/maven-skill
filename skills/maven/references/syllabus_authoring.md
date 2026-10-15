@@ -39,7 +39,9 @@
 5. **图片**：把光标放到末尾（`focus('end')`），点工具栏 Image 按钮，接住文件选择器设文件。直接对隐藏的 `input[accept="image/*"]` 设文件不可靠；同一个文件重复选择不会触发 change，每次先把所有 file input 的 value 清空。完成的判据：文档里多一个 `customImage`，`src` 是 http 地址，`isimageuploading` 为**字符串** `"false"`。
 6. **视频**：Image 后面那个没有 tooltip 的按钮是 Video，点开后点 Upload video，接住文件选择器。上传走 `POST api.maven.com/assets/video_assets/direct_upload` 到 Mux。完成的判据：`customVideo` 节点 `progresspercentage` 为 100 且有 `video_asset_id`（`src` 一直是 null）。
 7. **注意节点是行内的。** `customImage` 和 `customVideo` 放在段落里面，统计要用 `editor.state.doc.descendants`，只看 `getJSON().content` 顶层会数成 0。
-8. **核对后保存。** 图片数、视频数和清单一致才点 Save changes；它发出 `PUT https://api.maven.com/syllabi/<syllabus_id>/modules/<module_uuid>?should_update_module_items=true`，一次提交整个模块（描述和所有 item）。保存后页面会回到 Syllabus 总览，下一个 lesson 要重新打开模块编辑页。
+8. **规范化排版再保存。** 学员页的段落没有上下间距，空白全靠空段落：一次 `setContent` 整篇放进去的 HTML 段落挤成一片；逐段 `insertContentAt` 时标签之间的换行又会变成空段落，在列表里变成**空的圆点**。保存前按一条规则重建正文：去掉所有空段落和空列表项；文字和图片挤在同一段的拆开，每个图片或视频单独成段；相邻的块之间恰好放一个空段落，图片和紧跟的斜体图注之间不放。做法是在 ProseMirror 里遍历顶层节点，组出新的 Fragment，再用一次 `tr.replaceWith(0, doc.content.size, ...)` 提交；媒体节点原样复用，不会重新上传。
+9. **代码块语言。** 编辑器默认语言是 javascript，标成 `text` 或没标语言的代码块会被当成 JavaScript 高亮，普通英文的提示词里会出现彩色关键词。可用语言里有 `plaintext`，把这类代码块的 `language` 改成它；bash、json 等保持原样。
+10. **核对后保存。** 图片数、视频数和清单一致才点 Save changes；它发出 `PUT https://api.maven.com/syllabi/<syllabus_id>/modules/<module_uuid>?should_update_module_items=true`，一次提交整个模块（描述和所有 item）。保存后页面会回到 Syllabus 总览，下一个 lesson 要重新打开模块编辑页。
 
 ## 5. 坑
 
@@ -53,9 +55,12 @@
 | 等图片上传「完成」一直超时 | `isimageuploading` 存的是字符串 `"false"`，按布尔判断会一直当成在上传。 |
 | 删 item 没有确认框 | item 更多菜单里的 Delete 点了就删（保存后生效），删前核对选中的是哪个 item。 |
 | 排序错了 | 侧栏可以拖动，但自动化拖动不可靠；删掉排错的 item 再按顺序重建更稳。 |
+| 学员页段落挤在一起，或列表里有空的圆点 | 空段落多了或少了。按第 4 节第 8 步重建正文；已经保存的 lesson 也可以单独打开、规范化、再保存。 |
+| 提示词代码块里英文单词被染色 | 默认语言是 javascript。改成 `plaintext`（第 4 节第 9 步）。 |
 
 ## 6. 交付前核对
 
 - 逐个点开 item：标题、emoji、图片数、视频数、行内代码数和清单一致；然后刷新丢弃点开造成的 Unsaved changes。
+- **在学员页逐页看排版**，不能只看编辑器：段落和标题之间有没有空隙、列表里有没有空圆点、纯文本代码块有没有被染色、图片和图注是否连在一起。学员页正文在内部滚动容器里，整页截图截不到，要滚动到具体元素再截。
 - 学员视角：`/<school>/<course>/<slug>/home` 能看到模块和 item 数；打开一两个 lesson 看图片、视频、代码块是否正常。
 - 告诉用户：模块位置、可见性（落地页是否展示）、是否设了 release date、有没有发通知。
