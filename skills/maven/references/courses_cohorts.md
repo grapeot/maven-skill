@@ -23,7 +23,11 @@ maven-skill cohorts list --course <COURSE_ADMIN_URL>
 ```
 
 - **解析**：进入课程概览页，解析观察到的班期卡片，输出 slug、状态、开始日期与页面日期文字。
-- **slug 交叉核验**：每张卡片同时读取 Student home 链接与 settings 链接（`?cohort=<slug>`）；只要二者都给出了 slug，就必须指向同一个，不一致即拒绝，不猜测。至少需要其中一个来源存在，二者都缺失时该卡片无效。
+- **两种页面结构**（都支持）：
+  - **2026-10 起**：每张班期卡片本身是一个指向 `<课程管理路径>/cohorts/<slug>` 的链接，卡片文字形如 `Cohort 14 In session Oct 12 – Oct 26, 2026 7 students`（DOM 里年份和人数可能连在一起，解析不受影响）。卡片上不再有 Student home 链接，它挪进了班期自己的管理页；课程级导航也不再有 Students 标签，学员页在每个班期下面（`<课程管理路径>/cohorts/<slug>/students`）。
+  - **更早的结构**：卡片里有 Student home 链接和 settings 链接（`?cohort=<slug>`），课程级导航有 Students。
+- **slug 交叉核验**：卡片上能读到的 slug 来源（班期管理链接、Student home 链接、settings 链接）只要给出了 slug，就必须一致，不一致即拒绝，不猜测。至少需要一个来源，全部缺失时该卡片无效。
+- **状态**：`upcoming`、`in_session`（进行中）、`ended`（已结束）、`self_paced`，都不匹配时为 `scheduled`。
 - **完整性**：出现分页控件时报告 `completeness.status=partial`，`pages_visited=1`。
 - **导出联动**：班期列表为 `partial` 时，`students export --cohort latest` 拒绝推断 latest；此时应先观察并明确指定实际 slug。
 
@@ -35,7 +39,7 @@ maven-skill cohorts list --course <COURSE_ADMIN_URL>
 
 1. **恰好一个 Upcoming**：直接选中它。
 2. **多个 Upcoming**：按开始日期选最新者。要求所有候选日期含完整年份；缺年份或日期并列时拒绝。
-3. **没有 Upcoming**：从状态非 `self_paced` 且带日期的班期中选最新者。**注意这条路径可能选中已排期（scheduled）甚至已过去的班期**；同样要求完整年份，缺年份或并列时拒绝。
+3. **没有 Upcoming**：从状态非 `self_paced` 且带日期的班期中选最新者（通常就是 `in_session` 的那一期）。**注意这条路径可能选中已排期（scheduled）甚至已过去的班期**；同样要求完整年份，缺年份或并列时拒绝。
 4. 班期列表为空，或以上都得不到唯一结果：拒绝。
 
 比较日期时一律要求完整年份；只有月份、没有年份时不做排序。
