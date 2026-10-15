@@ -27,7 +27,7 @@ maven-skill students export --course <COURSE_ADMIN_URL> --cohort <COHORT_SLUG> [
 
 为了保证操作安全且不干扰用户当前界面，CLI 遵循以下内部交互契约：
 
-1. **独立临时工作标签页**：在当前浏览器上下文中自动建立独立临时工作标签页，导航至学员管理页面，等待页面的 Enrolled 学员计数稳定。
+1. **独立临时工作标签页**：在当前浏览器上下文中自动建立独立临时工作标签页，导航至学员管理页面，等待页面的 Enrolled 学员计数稳定。课程级导航有 Students 时用 `students?cohort=<slug>`；2026-10 起的页面结构没有课程级 Students，改用班期自己的 `cohorts/<slug>/students`。
 2. **打开导出对话框**：定位并点击学员列表上方的无文本导出图标按钮，打开 `Export Students` 对话框。
 3. **确认筛选条件与人数**：在对话框中确保仅勾选 `Enrolled` 状态选项，核对勾选后的人数与页面计数一致。
 4. **触发下载与拦截保存**：点击确认导出，通过 CDP 拦截并保存下载的 CSV 文件流。

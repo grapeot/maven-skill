@@ -8,6 +8,7 @@ from maven_skill.parse import (
     CONSUMED_COLUMNS,
     OBSERVED_EXPORT_COLUMNS,
     choose_cohort,
+    cohort_students_url,
     dedupe_courses,
     parse_cohort_card,
     refuse_partial_latest,
@@ -119,6 +120,54 @@ def test_students_url_replaces_cohort_from_nav_link():
     assert students_url_for(nav, "async") == (
         "https://maven.com/example-school/admin/courses/example-course/students?cohort=async"
     )
+
+
+def admin_card(slug, text):
+    """2026-10 overview layout: the card is a link to <course>/cohorts/<slug>, no Student home link."""
+    return {
+        "text": text,
+        "home": None,
+        "admin": f"https://maven.com/example-school/admin/courses/example-course/cohorts/{slug}",
+        "settings": None,
+    }
+
+
+def test_admin_link_cards_parse_status_dates_and_slug():
+    live = parse_cohort_card(admin_card("9", "Cohort 9 In session Oct 5 – Oct 19, 2026 25 students"))
+    assert live["slug"] == "9" and live["status"] == "in_session" and live["label"] == "Cohort 9"
+    assert live["start"] == {"month": 10, "day": 5, "year": 2026}
+    ended = parse_cohort_card(admin_card("8", "Cohort 8 Ended Jul 6 – Jul 20, 2026 30 students"))
+    assert ended["status"] == "ended"
+    # the DOM runs the year into the student count ("202625 students"); the year still parses
+    glued = parse_cohort_card(admin_card("7", "Cohort 7 Ended Apr 6 – Apr 20, 202631 students"))
+    assert glued["start"]["year"] == 2026
+    async_card = parse_cohort_card(admin_card("async", "Self-paced cohort Ended Sep 2 – Sep 15, 2024 40 students"))
+    assert async_card["status"] == "self_paced"
+
+
+def test_latest_picks_the_in_session_cohort_when_none_is_upcoming():
+    items = [
+        parse_cohort_card(admin_card("9", "Cohort 9 In session Oct 5 – Oct 19, 2026 25 students")),
+        parse_cohort_card(admin_card("8", "Cohort 8 Ended Jul 6 – Jul 20, 2026 30 students")),
+        parse_cohort_card(admin_card("async", "Self-paced cohort Ended Sep 2 – Sep 15, 2026 40 students")),
+    ]
+    chosen, _reason = choose_cohort(items, "latest")
+    assert chosen["slug"] == "9"
+
+
+def test_admin_link_must_agree_with_other_links():
+    bad = admin_card("9", "Cohort 9 In session Oct 5 – Oct 19, 2026 25 students")
+    bad["settings"] = "https://maven.com/example-school/admin/courses/example-course/settings?cohort=8"
+    with pytest.raises(MavenError, match="disagree"):
+        parse_cohort_card(bad)
+
+
+def test_cohort_students_url_for_the_new_layout():
+    assert cohort_students_url(
+        "/example-school/admin/courses/example-course", "9", "https://maven.com/example-school/admin/courses/example-course"
+    ) == "https://maven.com/example-school/admin/courses/example-course/cohorts/9/students"
+    with pytest.raises(MavenError):
+        cohort_students_url("/example-school/admin/courses/example-course", "../x", "https://maven.com/")
 
 
 def test_course_links_are_deduped_without_dropping_distinct_courses():

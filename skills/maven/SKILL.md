@@ -1,6 +1,6 @@
 ---
 name: maven
-description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports, read Lightning Lesson drafts and aggregate stats, read course reviews (public landing-page reviews and per-cohort post-course survey ratings), and list promo codes with their active/paused status or locate a code's pause toggle for a human, without writing.
+description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports, read Lightning Lesson drafts and aggregate stats, read course reviews (public landing-page reviews and per-cohort post-course survey ratings), and list promo codes with their active/paused status or locate a code's pause toggle for a human, without writing. Also documents how to add modules and lessons to a cohort syllabus in a visible browser, which is a business write that needs the user's explicit approval.
 ---
 
 # Maven Agent Skill
@@ -53,6 +53,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 | 只读核对折扣码（promo code）状态 | `maven-skill promo-codes list --course <COURSE_ADMIN_URL\|<SCHOOL>/<COURSE>\|COURSE_SLUG> [--json]` | [references/promo_codes.md](references/promo_codes.md) |
 | 定位某个码的暂停按钮（供人类操作） | `maven-skill promo-codes locate-pause --course <COURSE_ADMIN_URL\|<SCHOOL>/<COURSE>> --code <CODE> --output-dir <DIR> [--json]` | [references/promo_codes.md](references/promo_codes.md) 第 3、5 节 |
 | 生成带折扣的分享链接 | 无 CLI，按格式拼接后用未登录浏览器验收 | [references/promo_codes.md](references/promo_codes.md)「折扣分享链接」 |
+| 往班期 Syllabus 加模块和 lesson（业务写入，需授权） | 无 CLI，可见浏览器里操作 | [references/syllabus_authoring.md](references/syllabus_authoring.md) |
 | 会话与登录配置 | `maven-skill session open\|status\|save\|close` | [references/session.md](references/session.md) |
 
 命令细节见对应 reference；只有第 2 节的会话连通检查是串行前置，其余只读任务按需单独执行，不必按顺序走。
@@ -80,7 +81,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 ## 5. 安全红线与业务边界
 
 - **绝对只读红线**：
-  - 严禁修改课程大纲、价格、班期排期或学生状态。
+  - CLI 严禁修改课程大纲、价格、班期排期或学生状态。往班期 Syllabus 加内容只在用户对具体内容和班期明确授权后，按 [references/syllabus_authoring.md](references/syllabus_authoring.md) 在可见浏览器里做；绝不使用 Import content（会覆盖 syllabus 并删除学员记录），不改动已有模块和 item。
   - 严禁自动向学生发送邀请邮件、私信或系统通知。
   - 严禁调用任何形式的外部资金转账、分润结算或 Ledger 写入接口。
 - **折扣码边界**：

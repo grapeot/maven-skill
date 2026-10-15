@@ -18,6 +18,7 @@ from maven_skill.parse import (
     canonical_url,
     choose_cohort,
     choose_students_nav,
+    cohort_students_url,
     course_admin_path,
     dedupe_courses,
     assert_review_output,
@@ -89,18 +90,27 @@ COURSE_READY_JS = """() => {
 OVERVIEW_READY_JS = """() => {
   const text = el => (el.innerText || '').trim();
   if ([...document.querySelectorAll('a')].some(el => text(el) === 'Student home')) return true;
+  // 2026-10 layout: each cohort card is a link to <course>/cohorts/<slug>
+  if ([...document.querySelectorAll('a')].some(el => { try { return /\\/admin\\/courses\\/[^/]+\\/cohorts\\/[^/]+\\/?$/.test(new URL(el.href).pathname) } catch (e) { return false } })) return true;
   if ([...document.querySelectorAll('h1,h2,h3,p')].some(el => text(el) === 'No cohorts' || text(el) === 'No cohorts yet')) return true;
   const path = location.pathname.replace(/\\/$/, '');
   if (/\\/admin\\/courses\\/[^/]+$/.test(path)) return false;
   return [...document.querySelectorAll('a')].some(el => text(el) === 'Overview');
 }"""
 OVERVIEW_JS = """() => {
-  const homes = [...document.querySelectorAll('a')].filter(el => (el.innerText || '').trim() === 'Student home');
-  const cards = homes.map(el => {
+  // A card is the largest ancestor of its anchor that holds no other card anchor. Two layouts:
+  // before 2026-10 each card had a "Student home" link (plus a settings?cohort=<slug> link);
+  // since then the card itself is a link to <course>/cohorts/<slug> and Student home moved into the cohort page.
+  const isCohortAdmin = a => { try { return /\\/admin\\/courses\\/[^/]+\\/cohorts\\/[^/]+\\/?$/.test(new URL(a.href).pathname) } catch (e) { return false } };
+  const isHome = a => (a.innerText || '').trim() === 'Student home';
+  let anchors = [...document.querySelectorAll('a')].filter(isHome);
+  let isCard = isHome;
+  if (!anchors.length) { anchors = [...document.querySelectorAll('a')].filter(isCohortAdmin); isCard = isCohortAdmin; }
+  const cards = anchors.map(el => {
     let node = el;
     while (node.parentElement) {
       const parent = node.parentElement;
-      const count = [...parent.querySelectorAll('a')].filter(a => (a.innerText || '').trim() === 'Student home').length;
+      const count = [...parent.querySelectorAll('a')].filter(isCard).length;
       if (count > 1) break;
       node = parent;
     }
@@ -112,7 +122,8 @@ OVERVIEW_JS = """() => {
     });
     return {
       text: (node.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 300),
-      home: el.href,
+      home: isHome(el) ? el.href : null,
+      admin: isCohortAdmin(el) ? el.href : null,
       settings: settings ? settings.href : null
     };
   });
@@ -397,11 +408,12 @@ def list_cohorts(page, course_url: str) -> dict:
 def export_students(page, course_url: str, selector: str, output: Path | None, data_dir: Path) -> dict:
     state = _open_overview(page, course_url)
     parsed = _cohorts_from_state(state, page.url)
-    if not parsed["students_nav"]:
-        raise MavenError("Students navigation link was not found on the course page")
     refuse_partial_latest(selector, parsed["completeness"])
     cohort, reason = choose_cohort(parsed["cohorts"], selector)
-    students_url = students_url_for(parsed["students_nav"], cohort["slug"])
+    if parsed["students_nav"]:
+        students_url = students_url_for(parsed["students_nav"], cohort["slug"])
+    else:  # 2026-10 layout: no course-level Students tab; each cohort has its own students page
+        students_url = cohort_students_url(course_admin_path(page.url), cohort["slug"], page.url)
     validate_url(students_url)
     _goto(page, students_url)
     page_enrolled = _wait_enrolled_count(page)

@@ -106,24 +106,45 @@ def slug_from_settings(url: str) -> str | None:
     return values[0]
 
 
+def slug_from_admin(url: str) -> str | None:
+    """Slug of a 2026-10 cohort card link: <school>/admin/courses/<course>/cohorts/<slug>."""
+    parts = [part for part in urlsplit(url).path.split("/") if part]
+    if len(parts) >= 2 and parts[-2] == "cohorts" and "admin" in parts:
+        return parts[-1]
+    return None
+
+
+def cohort_students_url(course_path: str, slug: str, base_url: str) -> str:
+    """Per-cohort students page (2026-10 layout has no course-level Students tab)."""
+    safe_slug_token(slug)
+    base = urlsplit(base_url)
+    return urlunsplit((base.scheme, base.netloc, f"{course_path.rstrip('/')}/cohorts/{slug}/students", "", ""))
+
+
 def parse_cohort_card(card: dict) -> dict:
     text = " ".join((card.get("text") or "").split())
     if not text or len(text) > 180 or EMAIL.search(text):
         raise MavenError("cohort card boundary was not found")
     home = card.get("home") or ""
     settings = card.get("settings") or ""
+    admin = card.get("admin") or ""
     home_slug = slug_from_home(home)
     settings_slug = slug_from_settings(settings)
-    found = [slug for slug in (home_slug, settings_slug) if slug]
+    admin_slug = slug_from_admin(admin)
+    found = [slug for slug in (home_slug, settings_slug, admin_slug) if slug]
     if not found:
         raise MavenError("cohort card did not expose a cohort parameter")
     if len(set(found)) != 1:
-        raise MavenError("cohort student home and settings links disagree")
+        raise MavenError("cohort card links disagree on the cohort slug")
     lowered = text.lower()
     if "upcoming" in lowered:
         status = "upcoming"
     elif "self-paced" in lowered:
         status = "self_paced"
+    elif "in session" in lowered:
+        status = "in_session"
+    elif re.search(r"\bended\b", lowered):
+        status = "ended"
     else:
         status = "scheduled"
     match = DATE_RE.search(text)
@@ -141,7 +162,7 @@ def parse_cohort_card(card: dict) -> dict:
     if match:
         label = text[: match.start()]
     label = re.sub(r"\bupcoming\b", "", label, flags=re.IGNORECASE)
-    label = re.sub(r"\b(edit|student home)\b", "", label, flags=re.IGNORECASE)
+    label = re.sub(r"\b(edit|student home|in session|ended)\b", "", label, flags=re.IGNORECASE)
     label = " ".join(label.split())
     return {
         "slug": found[0],
