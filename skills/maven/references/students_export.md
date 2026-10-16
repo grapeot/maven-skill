@@ -64,3 +64,48 @@ maven-skill students export --course <COURSE_ADMIN_URL> --cohort <COHORT_SLUG> [
 
 - **输出限制**：CLI stdout 与向用户的汇报回复中，**严禁打印任何学员的真实姓名或邮箱地址**。
 - **输出内容**：仅输出操作摘要（课程 URL、班期 slug）、Enrolled 人数、CSV 相对路径、文件大小与 SHA-256 校验和。
+
+---
+
+## 6. 看学员的职位、公司与报名动机（听众画像）
+
+Maven 没有单独的「学员资料」导出。学员的职位、公司等信息就在 `students export` 导出的 CSV 里，不需要逐个点开学员详情页。截至 2026-10 观察到的 11 列：
+
+| 列 | 含义 | 备注 |
+|---|---|---|
+| `full_name`、`preferred_name` | 姓名、称呼 | PII |
+| `email` | 报名邮箱 | PII；Ledger 等下游用它做主键 |
+| `status` | 报名状态 | 导出只含 `enrolled` |
+| `company` | 公司 | 学员自填，可能为空 |
+| `job_title` | 职位 | 学员自填，可能为空，写法不统一（如 `ML Engineer`、`Sr. ML Eng`） |
+| `linkedin_url`、`twitter_username` | 社交链接 | PII，可能为空 |
+| `course_join_question` | 报名时对课程自定义问题的回答 | 只有课程在报名页设置了问题才有内容；没设置时整列为空 |
+| `enrolled_at` | 报名时间 | 带时区 |
+| `source` | 报名来源 | Maven 的界面字符串，例如付费报名与免费报名（`Enrolled for free`，常见于转期或赠课）分开标注 |
+
+**做法。** 先按第 1 节导出目标班期，然后在本地读 CSV，只取 `company`、`job_title`、`source`、`enrolled_at`、`course_join_question` 这几列做汇总，不读也不打印姓名、邮箱和社交链接：
+
+```bash
+python3 - <<'PY'
+import csv, collections
+rows = list(csv.DictReader(open("<PRIVATE_DIR>/students-<cohort>.csv", encoding="utf-8")))
+print("enrolled:", len(rows))
+print("missing job_title:", sum(not r["job_title"].strip() for r in rows))
+print(collections.Counter(r["source"] for r in rows))
+for r in rows:
+    print(r["job_title"] or "-", "|", r["company"] or "-", "|", r["enrolled_at"][:10])
+PY
+```
+
+虚构输出示例：
+
+```text
+enrolled: 3
+missing job_title: 1
+Counter({'Payment started': 2, 'Enrolled for free': 1})
+Marketing Manager | Example Corp | 2026-01-05
+Analyst | Sample Analytics | 2025-12-20
+- | - | 2026-01-08
+```
+
+**隐私。** 职位和公司组合起来，在小班期里足以认出具体的人，所以和姓名、邮箱一样只留在私有目录。给用户汇报时只报按角色归类后的分布（如「3 位工程、1 位市场」），不要逐行列出公司加职位，更不要和姓名放在一起。公开文档与测试一律用虚构示例。

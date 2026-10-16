@@ -1,6 +1,6 @@
 ---
 name: maven
-description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports, read Lightning Lesson drafts and aggregate stats, read course reviews (public landing-page reviews and per-cohort post-course survey ratings), and list promo codes with their active/paused status or locate a code's pause toggle for a human, without writing. Also documents how to add modules and lessons to a cohort syllabus in a visible browser, which is a business write that needs the user's explicit approval.
+description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports (which also carry each student's self-reported job title, company, and join-question answer), read Lightning Lesson drafts and aggregate stats, read course reviews (public landing-page reviews and per-cohort post-course survey ratings), and list promo codes with their active/paused status or locate a code's pause toggle for a human, without writing. Also documents how to add modules and lessons to a cohort syllabus in a visible browser, which is a business write that needs the user's explicit approval.
 ---
 
 # Maven Agent Skill
@@ -48,6 +48,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 | 查课程列表 | `maven-skill courses list` | [references/courses_cohorts.md](references/courses_cohorts.md) |
 | 查班期 / 确定 latest | `maven-skill cohorts list --course <COURSE_ADMIN_URL>` | [references/courses_cohorts.md](references/courses_cohorts.md) |
 | 导出 Enrolled 学员 CSV | `maven-skill students export --course <COURSE_ADMIN_URL> --cohort latest\|<COHORT_SLUG> [--output <PATH>]` | [references/students_export.md](references/students_export.md) |
+| 看学员职位、公司与报名动机（听众画像） | 先 `students export`，再本地汇总 CSV 的 `job_title`、`company` 等列 | [references/students_export.md](references/students_export.md) 第 6 节 |
 | 只读查看 Lightning Lesson | `maven-skill lessons list`<br>`maven-skill lessons show --lesson <ID_OR_URL>`<br>`maven-skill lessons stats --all`（或 `--lesson <ID_OR_URL>`） | [references/lightning_lessons.md](references/lightning_lessons.md) |
 | 读课程评价（公开评价 / 班期问卷评分） | `maven-skill reviews list --course <PUBLIC_COURSE_URL\|COURSE_ADMIN_URL>`<br>`maven-skill reviews surveys --course <COURSE_ADMIN_URL> [--download [--cohort <LABEL\|N>] [--output-dir <DIR>]]` | [references/reviews.md](references/reviews.md) |
 | 只读核对折扣码（promo code）状态 | `maven-skill promo-codes list --course <COURSE_ADMIN_URL\|<SCHOOL>/<COURSE>\|COURSE_SLUG> [--json]` | [references/promo_codes.md](references/promo_codes.md) |
