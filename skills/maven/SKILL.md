@@ -7,14 +7,17 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 
 本技能是面向 Maven（maven.com）平台的只读工具，采用「浏览器优先、人工登录、Agent 观察」架构，通过 Chrome DevTools Protocol (CDP) 连接已登录的 Chrome 实例，执行课程与班期观察、Lightning Lesson 查看、课程评价读取、折扣码状态读取与暂停按钮定位，以及已校验的报名学员名单导出。
 
-> **阶段状态说明**：默认持久 profile 路线已验证（支持课程发现、最新班期选择、CSV 导出及重启与临时 headless 运行）。`--auth-state` 隔离逻辑属于实验路径，离线测试通过但在实机新 context 中认证恢复失败，不保证可移植登录。
+**可见窗口是默认。** 所有浏览器工作都使用 `maven-skill session open` 启动的可见 Chrome 窗口。用户需要看到 Agent 正在做什么。Agent 不得自行启动 headless，也不得把已有会话切换成 headless，除非用户明确要求或批准。Headless 只是经用户授权的例外，不是常规路径，也不是默认的已验证路线。
+
+> **阶段状态说明**：默认持久 profile 路线已验证（支持课程发现、最新班期选择、CSV 导出，以及关闭 Chrome 后用可见窗口重启并复用登录）。`--auth-state` 隔离逻辑属于实验路径，离线测试通过但在实机新 context 中认证恢复失败，不保证可移植登录。
 
 ---
 
 ## 1. 目标
 
+- 浏览器工作默认打开可见 Chrome 窗口（`maven-skill session open`），让用户看到 Agent 的操作。未经用户明确要求或批准，不得启动或切换到 headless。
 - 自动化以只读方式获取 Maven 课程开设信息、班期排期及 Lightning Lesson 状态与统计。
-- 在不干扰用户当前浏览界面的前提下，安全执行后台工作标签页交互与学员名单 CSV 导出。
+- 在可见窗口的独立工作标签页中完成交互与学员名单 CSV 导出，不覆盖用户当前停留的页面。
 - 坚持绝对只读原则，提供严格校验与 SHA-256 审计收据的产物，严禁任何平台修改或未授权写入。
 
 ---
@@ -27,7 +30,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
    ```bash
    maven-skill session open
    ```
-   并在弹出的 Chrome 窗口中完成登录。**若浏览器已运行但未登录或登录失效，同样需要人工登录**；先读 [会话与登录配置参考](references/session.md)，尤其用户屏幕共享时不得打开可见窗口。
+   并在弹出的 Chrome 窗口中完成登录。**若浏览器已运行但未登录或登录失效，同样需要人工登录**；先读 [会话与登录配置参考](references/session.md)。默认必须是可见窗口。用户屏幕共享时不得打开可见窗口，此时也不得自行改用 headless，除非用户明确授权。
 2. **连通性检查**：Agent 执行：
    ```bash
    maven-skill session status
@@ -35,7 +38,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
    - 返回包含 `browser_connected: true` 时方可继续；连接失败或超时则**停下来提示用户**：“未检测到活跃的 Maven 浏览器会话，请先执行 `maven-skill session open` 并在弹出的浏览器中完成登录。”
    - **重要提示**：`status` 仅代表本地 CDP 调试端口可达，**不代表 Maven 已登录**。业务命令若报告未认证（跳转登录页、找不到账号菜单），停止并提示用户登录。
 
-环境变量、数据目录、端口、`--auth-state` 与 headless 运行等细节见 [会话与登录配置参考](references/session.md)。
+环境变量、数据目录、端口与 `--auth-state` 见 [会话与登录配置参考](references/session.md)。可见窗口默认规则与 headless 例外也在同一文档；headless 不是常规配置。
 
 ---
 
