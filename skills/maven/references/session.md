@@ -33,7 +33,7 @@ CLI 提供四个会话管理命令，执行结果统一输出标准 JSON：
 ```bash
 maven-skill session open [--url https://maven.com/]
 ```
-- **语义**：唤起绑定独立持久 Profile（默认 `.local/browser-profile`）的 Chrome 实例，供人工完成登录。
+- **语义**：唤起绑定独立持久 Profile（默认 `.local/browser-profile`）的可见 Chrome 窗口，供人工完成登录，并让用户看到后续操作。默认不要用 headless 启动。
 - **复用行为**：若已有对应 CDP 端口的会话在运行，直接复用连接，且不覆盖用户当前停留在浏览器中的页面。
 
 ### 3.2 `session status`
@@ -80,12 +80,14 @@ maven-skill --auth-state .local/auth-state.json courses list
 
 ---
 
-## 5. 屏幕共享与 Headless 运行
+## 5. 可见窗口默认；Headless 只在明确授权后
 
-- 人工登录与常规使用默认开启可见 Chrome 窗口。
-- **用户屏幕共享时，不得打开可见窗口。** 这是硬约束，不是可选优化：可见窗口会暴露浏览器中的私有内容。此场景下若尚未有可用会话，应先提示用户停止共享或择机登录，并改用下面授权的 headless 方式。
-- 在用户屏幕共享等敏感场景下，可使用经用户授权的本地临时 wrapper 启动 headless Chrome（如注入 `--headless=new` 参数），并经由 `MAVEN_CHROME_EXECUTABLE` 指定。该 wrapper 复用同一持久 profile 和 CDP 端口。
-- **不要永久修改 CLI 默认值**，保持公开 CLI 默认行为不变。
+所有浏览器工作的默认是 `maven-skill session open` 打开的可见 Chrome 窗口。用户需要看到 Agent 正在做什么。Agent 不得自行启动 headless Chrome，也不得把已有可见会话换成 headless。用户没有在当前任务里明确要求或批准 headless 时，停下来问，不要把它当成可以自行选择的运行方式。
+
+Headless 不是常规选项，也不是日常验收路径。它只在用户明确授权之后作为例外，典型情况是屏幕共享，或当前环境没有图形界面。「去做这个任务」不等于允许 headless；授权必须针对这次 headless 运行本身。
+
+- **用户屏幕共享时，不得打开可见窗口。** 这是硬约束，不是可选优化：可见窗口会暴露浏览器中的私有内容。此时若还没有可用会话，先提示用户停止共享或择机登录。不要因为不能开可见窗口就自动改用 headless。只有用户明确授权之后，才可以用本地临时 wrapper 启动 headless Chrome（例如注入 `--headless=new`），并经由 `MAVEN_CHROME_EXECUTABLE` 指定。该 wrapper 复用同一持久 profile 和 CDP 端口。
+- **不要永久修改 CLI 默认值。** 公开 CLI 的默认行为保持为可见窗口。
 
 ---
 

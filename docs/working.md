@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-10-18: 浏览器默认可见窗口，headless 仅用户显式授权
+
+- `skills/maven/SKILL.md`：开头写明所有浏览器工作默认走 `maven-skill session open` 的可见 Chrome，用户需要看到 Agent 的操作。未经用户明确要求或批准，不得自行启动或切换到 headless。阶段状态说明不再把临时 headless 写成已验证的常规路线。
+- `skills/maven/references/session.md` 第 5 节改为先写可见窗口默认。Headless 只在屏幕共享或无图形界面、且用户明确授权后作为例外。屏幕共享不得打开可见窗口的约束保留。
+- 纯文档改动，CLI 与测试不变。历史验收记录不改写。
+
 ## 2026-10-07（续）: 折扣码只读命令 `promo-codes list` / `promo-codes locate-pause`
 
 ### 变更
