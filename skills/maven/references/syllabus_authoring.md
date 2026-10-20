@@ -6,7 +6,7 @@
 
 - **这是业务写入。** 只有用户对「往哪个班期加什么」明确授权后才做；参考文档本身不构成授权。
 - **用可见窗口。** `maven-skill session open`（不要换成 headless wrapper），让用户能看到 agent 在做什么。脚本用 CDP 连 `127.0.0.1:<port>` 上的同一个浏览器。
-- **绝不用「Import content」。** Syllabus 页右侧的 Import content from other cohorts 会用另一个班期**替换整个 syllabus，并永久删除学员的作业提交和 lesson 完成记录**。往进行中的班期加内容只能手工建模块和 item。新开班期时，在学员入学前从上一期导入才是它的正确用法。
+- **追加内容绝不用「Import content」。** Syllabus 页右侧的 Import content from other cohorts 会用另一个班期**替换整个 syllabus，并永久删除学员的作业提交和 lesson 完成记录**。往进行中的班期加内容只能手工建模块和 item。新开班期沿用旧材料，使用创建弹窗的复制选项，见 [cohort_creation.md](cohort_creation.md)，不要混淆两种操作。
 - **只动自己新建的东西。** 已有模块和 item 不改、不删、不挪。
 
 ## 1. 先弄清会发生什么

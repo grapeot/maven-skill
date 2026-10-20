@@ -1,11 +1,11 @@
 ---
 name: maven
-description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports (which also carry each student's self-reported job title, company, and join-question answer), read Lightning Lesson drafts and aggregate stats, read course reviews (public landing-page reviews and per-cohort post-course survey ratings), and list promo codes with their active/paused status or locate a code's pause toggle for a human, without writing. Also documents how to add modules and lessons to a cohort syllabus in a visible browser, which is a business write that needs the user's explicit approval.
+description: Connect to an authenticated Maven browser session via CDP to observe courses, list cohorts, export validated Enrolled student CSV reports (which also carry each student's self-reported job title, company, and join-question answer), read Lightning Lesson drafts and aggregate stats, read course reviews (public landing-page reviews and per-cohort post-course survey ratings), and list promo codes with their active/paused status or locate a code's pause toggle for a human, without writing. Also documents explicitly authorized browser operations to create a cohort by copying existing materials and to add modules and lessons to a cohort syllabus in a visible browser; the CLI remains read-only.
 ---
 
 # Maven Agent Skill
 
-本技能是面向 Maven（maven.com）平台的只读工具，采用「浏览器优先、人工登录、Agent 观察」架构，通过 Chrome DevTools Protocol (CDP) 连接已登录的 Chrome 实例，执行课程与班期观察、Lightning Lesson 查看、课程评价读取、折扣码状态读取与暂停按钮定位，以及已校验的报名学员名单导出。
+本技能采用「浏览器优先、人工登录、Agent 观察」架构，通过 Chrome DevTools Protocol (CDP) 连接已登录的 Chrome 实例。CLI 只提供课程与班期观察、Lightning Lesson 查看、课程评价读取、折扣码状态读取与暂停按钮定位，以及已校验的报名学员名单导出。用户明确授权的班期创建、Syllabus 写入等操作则按对应 reference 在可见浏览器中执行，不属于 CLI 写命令。
 
 **可见窗口是默认。** 所有浏览器工作都使用 `maven-skill session open` 启动的可见 Chrome 窗口。用户需要看到 Agent 正在做什么。Agent 不得自行启动 headless，也不得把已有会话切换成 headless，除非用户明确要求或批准。Headless 只是经用户授权的例外，不是常规路径，也不是默认的已验证路线。
 
@@ -18,7 +18,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 - 浏览器工作默认打开可见 Chrome 窗口（`maven-skill session open`），让用户看到 Agent 的操作。未经用户明确要求或批准，不得启动或切换到 headless。
 - 自动化以只读方式获取 Maven 课程开设信息、班期排期及 Lightning Lesson 状态与统计。
 - 在可见窗口的独立工作标签页中完成交互与学员名单 CSV 导出，不覆盖用户当前停留的页面。
-- 坚持绝对只读原则，提供严格校验与 SHA-256 审计收据的产物，严禁任何平台修改或未授权写入。
+- CLI 业务命令保持只读，导出产物提供严格校验与 SHA-256 审计收据；浏览器业务写入仅在用户明确授权后按对应 reference 执行。创建草稿不包含发布、开放报名或发送通知。
 
 ---
 
@@ -50,6 +50,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 |---|---|---|
 | 查课程列表 | `maven-skill courses list` | [references/courses_cohorts.md](references/courses_cohorts.md) |
 | 查班期 / 确定 latest | `maven-skill cohorts list --course <COURSE_ADMIN_URL>` | [references/courses_cohorts.md](references/courses_cohorts.md) |
+| 新建班期 / 复制旧班期材料（业务写入，需授权） | 无 CLI，可见浏览器中创建并读回验证；默认止于草稿 | [references/cohort_creation.md](references/cohort_creation.md) |
 | 导出 Enrolled 学员 CSV | `maven-skill students export --course <COURSE_ADMIN_URL> --cohort latest\|<COHORT_SLUG> [--output <PATH>]` | [references/students_export.md](references/students_export.md) |
 | 看学员职位、公司与报名动机（听众画像） | 先 `students export`，再本地汇总 CSV 的 `job_title`、`company` 等列 | [references/students_export.md](references/students_export.md) 第 6 节 |
 | 只读查看 Lightning Lesson | `maven-skill lessons list`<br>`maven-skill lessons show --lesson <ID_OR_URL>`<br>`maven-skill lessons stats --all`（或 `--lesson <ID_OR_URL>`） | [references/lightning_lessons.md](references/lightning_lessons.md) |
@@ -85,12 +86,12 @@ description: Connect to an authenticated Maven browser session via CDP to observ
 ## 5. 安全红线与业务边界
 
 - **绝对只读红线**：
-  - CLI 严禁修改课程大纲、价格、班期排期或学生状态。往班期 Syllabus 加内容只在用户对具体内容和班期明确授权后，按 [references/syllabus_authoring.md](references/syllabus_authoring.md) 在可见浏览器里做；绝不使用 Import content（会覆盖 syllabus 并删除学员记录），不改动已有模块和 item。
+  - CLI 严禁修改课程大纲、价格、班期排期或学生状态。新建班期仅在用户明确授权后，按 [references/cohort_creation.md](references/cohort_creation.md) 在可见浏览器中创建；创建弹窗的材料复制不等于 Syllabus 页的 Import content。往班期 Syllabus 加内容只在用户对具体内容和班期明确授权后，按 [references/syllabus_authoring.md](references/syllabus_authoring.md) 在可见浏览器里做；绝不使用 Import content（会覆盖 syllabus 并删除学员记录），不改动已有模块和 item。
   - 严禁自动向学生发送邀请邮件、私信或系统通知。
   - 严禁调用任何形式的外部资金转账、分润结算或 Ledger 写入接口。
 - **折扣码边界**：
   - 创建、暂停或删除折扣码（promo code）都是业务写入，CLI 不实现；默认由人类操作，Agent 仅可在用户对**具体动作**单独显式授权后协助；参考文档与操作步骤本身不构成授权。
-  - 任何业务写入操作必须先停下，向人类用户陈述意图并获得独立显式授权。
+  - 任何业务写入操作必须有针对该动作的显式授权；当前指令已明确授权时不重复询问。创建草稿不包含开放报名、发布落地页或发送通知的授权。
 - **只读交互约束**：
   - `lessons` 系列命令只导航和读取，不点击任何可写控件，不输入任何文字；事件链接只输出布尔值。
   - `reviews` 系列命令不回复、不发布、不隐藏任何评价，只点击 `Show more reviews` 与（`--download` 时）班期问卷的 `N responses` 下载按钮。

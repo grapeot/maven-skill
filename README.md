@@ -222,6 +222,7 @@ CLI 只提供上面的只读 `promo-codes` 命令，没有创建、暂停或删�
 |---|---|
 | [`references/session.md`](skills/maven/references/session.md) | 会话命令语义、环境变量、`--auth-state` 隔离上下文、headless 运行 |
 | [`references/courses_cohorts.md`](skills/maven/references/courses_cohorts.md) | 课程/班期发现契约与 `latest` 选期规则 |
+| [`references/cohort_creation.md`](skills/maven/references/cohort_creation.md) | 经授权在可见浏览器新建草稿班期、复制旧材料、核验日期与顺延活动；CLI 无写命令 |
 | [`references/students_export.md`](skills/maven/references/students_export.md) | `students export` 的命令、标签页生命周期、CSV 校验与收据 |
 | [`references/lightning_lessons.md`](skills/maven/references/lightning_lessons.md) | Lightning Lesson 管理界面契约、CLI 输出语义与坑点 |
 | [`references/reviews.md`](skills/maven/references/reviews.md) | 公开评价与班期问卷评分的读取契约、评分换算与隐私边界 |
@@ -238,7 +239,7 @@ CLI 只提供上面的只读 `promo-codes` 命令，没有创建、暂停或删�
    - 导出 CSV、认证快照文件及收据文件权限为 `0600`；
    - 导出的 CSV 文件若已存在，拒绝覆盖已有文件。
 3. **敏感文件全量忽略**：`.local/` 目录、下载文件、运行日志及 `.env` 均加入 `.gitignore`，严禁提交到代码仓库。
-4. **只读业务边界**：本工具仅用于只读观察、名单导出、Lightning Lesson 只读查看、课程评价读取与折扣码状态读取。严禁修改课程或学生数据，严禁发送邀请，严禁调用任何外部结算或记账写入接口。
+4. **只读业务边界**：CLI 仅用于只读观察、名单导出、Lightning Lesson 只读查看、课程评价读取与折扣码状态读取。用户明确授权的新建班期与 Syllabus 等浏览器写操作按对应 reference 执行；新建默认止于草稿，发布与开放报名另需授权。严禁自动发送邀请或调用外部结算、记账写入接口。
 5. **脱敏与脱密**：业务命令 stdout 绝不打印学员姓名与邮箱（`reviews list` 仅输出公开页面已展示的评价者显示名）。公共仓库中仅使用虚拟示例。
 
 ---

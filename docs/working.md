@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-10-20: 新建班期浏览器操作参考
+
+- 新增 `references/cohort_creation.md` 并接入根 skill 与 README：记录 Live 班期创建弹窗、复制源选择、单次提交防重复、创建后刷新读回及验收边界；CLI 不新增写命令。
+- 实测教训：日期差与首尾日历日计数不同；输入框显示的钟点不一定持久保存；`Creating…` 暂留不能当失败重试；CLI `upcoming` 可能仍是 Draft/Closed；复制后的活动与作业日期需独立检查。
+- 对齐 `syllabus_authoring.md`：新建弹窗复制旧材料与 Syllabus 页覆盖式 Import content 是不同操作。用户自行发布及改活动不记作 Agent 自动化实测。
+- 验证范围：依据已获授权的一次真实创建及刷新读回观察整理；本轮仅改文档，不重放生产创建或发布。
+- 独立 review：修正根 skill 旧目标中「禁止任何平台修改」与授权浏览器写入的冲突，其余无阻塞问题。`scripts/privacy_review.py` 通过，离线 `pytest -q` 292 项通过，`git diff --check` 通过。
+
 ## 2026-10-18: 浏览器默认可见窗口，headless 仅用户显式授权
 
 - `skills/maven/SKILL.md`：开头写明所有浏览器工作默认走 `maven-skill session open` 的可见 Chrome，用户需要看到 Agent 的操作。未经用户明确要求或批准，不得自行启动或切换到 headless。阶段状态说明不再把临时 headless 写成已验证的常规路线。
