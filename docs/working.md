@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-10-24: General 草稿与已发消息定点操作参考
+
+- 新增 [general_messages.md](../skills/maven/references/general_messages.md)，接入根 skill 的描述、路由与关键边界；CLI 与 API 不变。
+- 沉淀已验证经验：按活动日期与 `in_session` 选期，从真实 Student home / General 链接导航；SPA 按条件等待；唯一空 Quill 编辑器通过父节点实例填稿，读回正文、排版和全部链接。
+- 记录占位 URL 经 Quill 补全、发布后编码而看似有效的实际陷阱；缺真实链接的完整稿留本地。人机共用状态每次重读，用户已发送时不重复填；按用户措辞重填以其已发 HTML、plain text、link map 为基准，只换指定 URL。
+- 记录已发消息的唯一 group 定位、删除前备份、精确匹配原生 confirm 与权威视图验收；仅填草稿不包含发送、编辑或删除授权。
+- 修正根 skill 的刷新通则：未发草稿只在当前编辑器核验，置顶保留窗口；服务端持久化未经验证。本轮只改公开文档，经验来自既有实测，不访问 Maven 页面、不重放线上操作；公开示例仅用虚构数据。
+- 验证：离线 `pytest -q` 292 项通过；`scripts/privacy_review.py` 扫描 36 个文件通过。独立 Antigravity CLI 新会话（未参与起草）审阅三份变更与相关 skill，结论 PASS，无 High/Medium；按两条 Low 建议明确工作标签页保留规则，并在根 skill 红线节补齐 General 授权例外。`git diff --check` 与最终公开内容核查在提交前执行。
+
 ## 2026-10-20: 新建班期浏览器操作参考
 
 - 新增 `references/cohort_creation.md` 并接入根 skill 与 README：记录 Live 班期创建弹窗、复制源选择、单次提交防重复、创建后刷新读回及验收边界；CLI 不新增写命令。
