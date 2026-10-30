@@ -184,6 +184,120 @@ def _goto(page, url: str) -> None:
     _reject_login(page)
 
 
+ACCOUNT_MENU_JS = """() => {
+  const label = (el) => (el.innerText || el.getAttribute('aria-label') || '').replace(/\\s+/g, ' ').trim();
+  const seen = new Set();
+  const items = [];
+  for (const el of document.querySelectorAll("[role='menu'] a, [role='menu'] button, [role='menu'] [role='menuitem']")) {
+    if (seen.has(el)) continue;
+    seen.add(el);
+    const parent = el.closest('a');
+    const href = el.tagName === 'A' ? el.href : (parent ? parent.href : null);
+    items.push({text: label(el), href: href || null});
+  }
+  return items;
+}"""
+LOGOUT_LABELS = {"logout", "log out", "sign out"}
+LOGIN_LABELS = {"log in", "login", "sign in", "sign up"}
+ADMIN_ROOT = re.compile(r"^/[^/]+/admin/?$")
+
+
+def menu_label(text: str) -> str:
+    return " ".join((text or "").split()).casefold()
+
+
+def account_menu_signal(items: list[dict]) -> str:
+    labels = {menu_label(item.get("text") or "") for item in items}
+    if labels & LOGOUT_LABELS:
+        return "authenticated"
+    if labels & LOGIN_LABELS:
+        return "unauthenticated"
+    return "unknown"
+
+
+def choose_dashboard_href(items: list[dict]) -> str | None:
+    exact: list[str] = []
+    admin_roots: list[str] = []
+    for item in items:
+        href = item.get("href") or ""
+        if not href:
+            continue
+        if menu_label(item.get("text") or "") == "dashboard":
+            exact.append(href)
+        path = urlsplit(href).path
+        if ADMIN_ROOT.fullmatch(path):
+            admin_roots.append(href)
+    exact_unique = list(dict.fromkeys(exact))
+    if len(exact_unique) > 1:
+        raise MavenError("account menu exposed more than one Dashboard link")
+    if len(exact_unique) == 1:
+        return exact_unique[0]
+    if account_menu_signal(items) != "authenticated":
+        return None
+    roots = list(dict.fromkeys(admin_roots))
+    if len(roots) == 1:
+        return roots[0]
+    return None
+
+
+def account_menu_failure(items: list[dict]) -> MavenError:
+    signal = account_menu_signal(items)
+    if signal == "authenticated":
+        return MavenError(
+            "account menu opened but did not expose a Dashboard link; the page layout changed"
+        )
+    if signal == "unauthenticated":
+        return MavenError("account menu exposed a login action; session is not authenticated")
+    return MavenError(
+        "account menu did not expose a Dashboard link; session may be unauthenticated or the page layout changed"
+    )
+
+
+def _has_exact_dashboard(items: list[dict]) -> bool:
+    return any(
+        menu_label(item.get("text") or "") == "dashboard" and item.get("href")
+        for item in items
+    )
+
+
+def _read_account_menu(page, timeout_ms: int = 5000) -> list[dict]:
+    """Poll until the menu exposes a Dashboard destination, or the timeout elapses.
+
+    The menu shell and Logout can appear before the Dashboard link is inserted.
+    Reading once at shell-open time misses that link and looks like a logged-out session.
+    An exact Dashboard label returns immediately. A renamed unique /{org}/admin link is
+    accepted only after the item set has stopped changing, so a half-rendered menu is not used.
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    latest: list[dict] = []
+    last_sig = None
+    stable = 0
+    while True:
+        try:
+            latest = page.evaluate(ACCOUNT_MENU_JS) or []
+        except Exception:
+            latest = []
+        if _has_exact_dashboard(latest):
+            return latest
+        sig = tuple(
+            (menu_label(item.get("text") or ""), item.get("href") or "") for item in latest
+        )
+        if sig and sig == last_sig:
+            stable += 1
+        else:
+            stable = 0
+            last_sig = sig
+        if stable >= 3:
+            try:
+                if choose_dashboard_href(latest):
+                    return latest
+            except MavenError:
+                return latest
+        if time.monotonic() >= deadline:
+            return latest
+        page.wait_for_timeout(100)
+
+
 def _dashboard_href(page) -> str:
     _goto(page, HOME)
     try:
@@ -191,6 +305,7 @@ def _dashboard_href(page) -> str:
     except Exception:
         raise MavenError("account menu was not found; session is not authenticated or the homepage layout changed") from None
     buttons = page.locator("button[aria-haspopup='menu']")
+    opened: list[list[dict]] = []
     for index in range(buttons.count()):
         button = buttons.nth(index)
         if not button.is_visible():
@@ -207,19 +322,24 @@ def _dashboard_href(page) -> str:
             page.locator("[role='menu']").wait_for(timeout=5000)
         except Exception:
             continue
-        href = page.evaluate(
-            """() => {
-              const item = [...document.querySelectorAll('[role="menu"] a')].find(
-                el => (el.innerText || '').trim().toLowerCase() === 'dashboard'
-              );
-              return item ? item.href : null;
-            }"""
-        )
+        items = _read_account_menu(page)
+        opened.append(items)
+        href = choose_dashboard_href(items)
         if href:
             validate_url(href)
             return href
         page.keyboard.press("Escape")
-    raise MavenError("account menu did not expose a Dashboard link; session may be unauthenticated or the page layout changed")
+    if opened:
+        authenticated = [items for items in opened if account_menu_signal(items) == "authenticated"]
+        unauthenticated = [items for items in opened if account_menu_signal(items) == "unauthenticated"]
+        if authenticated:
+            raise account_menu_failure(authenticated[-1])
+        if unauthenticated:
+            raise account_menu_failure(unauthenticated[-1])
+        raise account_menu_failure(opened[-1])
+    raise MavenError(
+        "account menu did not expose a Dashboard link; session may be unauthenticated or the page layout changed"
+    )
 
 
 def _courses_href(page, dashboard: str) -> str:

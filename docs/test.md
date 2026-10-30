@@ -19,7 +19,7 @@
 source .venv/bin/activate
 pytest
 ```
-当前套件共包含 **288 项自动化测试**（含参数化用例），全部保持通过。
+当前套件共包含 **303 项自动化测试**（含参数化用例），全部保持通过。
 
 ### 2.1 会话管理与 CDP 安全测试 (`tests/test_session.py`)
 - **导航 URL 安全过滤**：限制仅允许 `maven.com` 域名下的 HTTPS 链接，阻断非 Maven 域、HTTP 协议以及携带账号密码凭据的 URL。
@@ -49,12 +49,18 @@ pytest
 - **输出文件防覆盖与权限**：验证 `reserve_output` 以 `0600` 模式独占创建文件；若目标文件已存在，报错拒绝覆盖。
 - **发布前隐私审阅**：独立运行 `python scripts/privacy_review.py`，扫描 Git 可发布文件中的非示例邮箱、个人路径、私钥及当前保存的 cookie 值；再人工核对差异中的课程、客户和运行数据。脚本不代替人工检查。
 
-### 2.3 工作标签页与上下文隔离测试 (`tests/test_ops_isolation.py`)
+### 2.3 账号菜单发现测试 (`tests/test_navigation.py`)
+
+- **延迟出现**：假页面第一次只给出 Logout，第二次才给出 Dashboard 链接；读取函数必须等到第二次，不能把第一次的空结果当成最终菜单。
+- **目的地选择**：文字为 Dashboard 的链接优先；已登录且标签不再是 Dashboard 时，唯一的 `/{org}/admin` 链接可用；未登录、嵌套 admin 路径、多个 admin 根路径都不猜测。两个 Dashboard 链接指向不同地址时拒绝。
+- **错误分类**：已打开且有 Logout、但没有 Dashboard 目的地，报布局变化，错误文本不含 unauthenticated。菜单里是 Log in / Sign up 才报未认证。
+
+### 2.4 工作标签页与上下文隔离测试 (`tests/test_ops_isolation.py`)
 - **默认工作标签页隔离**：验证在已有持久 Context 中打开新工作标签页，执行完毕后仅关闭新标签页，原有标签页、Context 及浏览器进程原样保持。
 - **`--auth-state` 上下文隔离**：验证基于状态快照创建全新的独立 Context，执行完毕后关闭临时 Context，完全不影响主 Context。
 - **快照文件不存在处理**：传入不存在的快照路径时报错退出，不触发任何浏览器上下文创建。
 
-### 2.4 Lightning Lesson 只读命令测试 (`tests/test_lessons.py`)
+### 2.5 Lightning Lesson 只读命令测试 (`tests/test_lessons.py`)
 - **列表解析**：手写虚拟分组数据，验证状态、日期时间与报名数解析；分组数量不符、未知分组、游离卡片、翻页控件或非 lesson 链接时报告 partial。
 - **lesson 引用**：接受 ID、管理页 URL、`/edit` 与带 `tab` 的 URL；拒绝非 maven.com、非 HTTPS、非 lesson 路径与不安全 ID。
 - **字段与上限**：优先使用页面 `N/M` 计数器，否则按默认上限计算；超限、缺链接、`data-error` 卡片、`Review N errors`、完成度与“完成后页头只剩 Publish”的判定。
@@ -64,7 +70,7 @@ pytest
 - **命令编排**：用记录调用的假页面跑 `list` / `show` / `stats`，断言零点击零输入；管理页 URL 跳过组织发现；内嵌数据属于其他 lesson 时拒绝；草稿 stats 报告未发布。
 - **生命周期与 CLI**：命令失败时工作标签页仍关闭；`stats` 必须且只能指定 `--lesson` 或 `--all`；意外异常输出经脱敏，不含 token、邮箱或路径。
 
-### 2.5 课程评价只读命令测试 (`tests/test_reviews.py`)
+### 2.6 课程评价只读命令测试 (`tests/test_reviews.py`)
 - **URL 规范化**：公开落地页与课程管理页（含子路径与查询串）都换算为公开落地页；拒绝非 HTTPS、非 maven.com、保留路径段与多级路径。
 - **卡片解析**：手写虚拟卡片文本叶子，验证姓名、班期标签、头衔、日期、全文的定位；缺头衔或标签、多段落、缺日期或正文；正文与头衔中的邮箱被替换。
 - **评分**：星标三态（实心/半星/空心）换算；内嵌 0–10 分优先、星标兜底；课程总评分换算与页面文字交叉核对。
@@ -73,7 +79,7 @@ pytest
 - **命令编排**：假页面驱动 `Show more reviews` 分页，断言只点击该按钮；单页不点击；重定向报错；点击守卫拒绝写入标签；`reviews surveys` 不加 `--download` 时零点击零文件，加 `--download` 时只点击目标班期按钮、文件 `0600`、写 `survey-export-*` 收据、stdout 无姓名邮箱与留言；无效下载被删除；静态检查新增脚本不含写入模式且内嵌读取不取 `user_id` 与头像。
 - **CLI**：参数解析；`--output-dir` 必须配合 `--download`。
 
-### 2.6 折扣码只读命令测试 (`tests/test_promo.py`)
+### 2.7 折扣码只读命令测试 (`tests/test_promo.py`)
 - **课程引用**：课程管理页 URL（含 `/settings?cohort=` 子路径）与 `<school>/<course>` 规范化为管理页；裸 slug 交给课程发现且必须唯一命中；拒绝非 HTTPS、非 maven.com、非管理页与多级路径。公开链接拼接、share slug 覆盖与码值转义。
 - **图标几何**：用 Maven 管理界面的图标路径（UI 资源，非业务数据）验证双竖条判为暂停、右指三角形判为恢复、链接与垃圾桶；单竖条、横向矩形、左指三角形与错误 viewBox 判为 unknown。
 - **handler 源码**：用虚构的压缩源码形状验证切换（含 `active:`、`"Paused"` 与取反）、复制、删除与缺失；源码与几何矛盾时报 conflict。

@@ -36,7 +36,7 @@ description: Connect to an authenticated Maven browser session via CDP to observ
    maven-skill session status
    ```
    - 返回包含 `browser_connected: true` 时方可继续；连接失败或超时则**停下来提示用户**：“未检测到活跃的 Maven 浏览器会话，请先执行 `maven-skill session open` 并在弹出的浏览器中完成登录。”
-   - **重要提示**：`status` 仅代表本地 CDP 调试端口可达，**不代表 Maven 已登录**。业务命令若报告未认证（跳转登录页、找不到账号菜单），停止并提示用户登录。
+    - **重要提示**：`status` 仅代表本地 CDP 调试端口可达，**不代表 Maven 已登录**。跳转登录页、账号菜单出现登录动作，才是未认证，停止并提示用户登录。账号菜单已经打开且有 Logout，但没有 Dashboard 链接，是页面布局变化，不是未登录。
 
 环境变量、数据目录、端口与 `--auth-state` 见 [会话与登录配置参考](references/session.md)。可见窗口默认规则与 headless 例外也在同一文档；headless 不是常规配置。
 

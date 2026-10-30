@@ -10,7 +10,8 @@
 maven-skill courses list
 ```
 
-- **动态发现**：从 Maven 首页账号菜单动态进入 Dashboard，再进入 Courses 列表；不硬编码组织标识或课程路径。
+- **动态发现**：从 Maven 首页账号菜单动态进入 Dashboard，再进入 Courses 列表；不硬编码组织标识或课程路径。菜单外壳和 Logout 可能先出现，Dashboard 链接随后才插入。命令会等到菜单给出 Dashboard 目的地，而不是在菜单刚打开时读一次就停。目的地优先取文字为 Dashboard 的链接；若已登录菜单里没有这个文字、但只有一个指向 `/{org}/admin` 的链接，用该链接。多个候选不一致时拒绝，不猜测。
+- **认证与布局分开报**：跳转登录页，或菜单里是 Log in / Sign up，才是未认证。菜单已打开并有 Logout，却没有 Dashboard 目的地，报布局变化，不报未登录。
 - **输出**：页面观察到的课程 URL 与标题列表。支持链接型分页；遇到无法自动遍历的下一页按钮时报告 `completeness.status=partial`。
 - **完整性**：必须检查 `completeness`。`partial` 只代表已遍历到的部分，**不等于全量课程**，不得据此断言课程数量或缺失。
 
