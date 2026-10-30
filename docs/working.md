@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-10-30: 账号菜单 Dashboard 延迟出现被误报为未登录
+
+- `courses list` 的失败点是首页账号菜单，不是课程页本身。菜单的 `role=menu` 外壳和 Logout 会先出现；Dashboard 链接大约 100ms 后才插入。旧逻辑在外壳出现时读一次，读不到就按 Escape 并报「session may be unauthenticated」。
+- 只读独立工作标签确认：已登录时可见账号按钮只有一个，菜单稳定后有且仅有一个文字为 Dashboard、路径为 `/{org}/admin` 的链接。不硬编码租户。
+- 修复：菜单打开后轮询到出现 Dashboard 目的地，或超时。文字精确匹配优先；已登录且只有一个 `/{org}/admin` 链接时，标签改名也可用。Logout 已出现却没有目的地时报布局变化，不报未登录。菜单里是 Log in / Sign up 才报未认证。
+- 同链的 Courses 发现逻辑未改。本轮不导出学员名单。
+- 验证：离线 `pytest -q` 303 项通过；`scripts/privacy_review.py` 扫描 37 个文件通过。修复后实机只读：`courses list` 完整，课程 1 门，Dashboard 与 Courses 路径形状正确；`cohorts list` 完整，15 个班期，slug 均存在，latest 为 upcoming。工作标签页已关闭，原有标签页数量不变。公开文档与测试只用虚构 `acme`。
+
 ## 2026-10-24: General 草稿与已发消息定点操作参考
 
 - 新增 [general_messages.md](../skills/maven/references/general_messages.md)，接入根 skill 的描述、路由与关键边界；CLI 与 API 不变。
